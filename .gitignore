@@ -1,2 +1,24 @@
+# Python
+backend/venv/
+backend/__pycache__/
+backend/routes/__pycache__/
+backend/ml/__pycache__/
+backend/ml/model.pkl
+**/*.pyc
+**/*.pyo
+
+# Environment — NEVER commit these
 backend/.env
-backend/.env
+frontend/.env
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# VS Code
+.vscode/
