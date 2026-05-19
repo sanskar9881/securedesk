@@ -1,16 +1,21 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routes import auth, files, admin, profile, phishing, chatbot, analyze, ai_copilot
-from ml.classifier import _get_model
+from routes import auth, files, admin, profile, phishing, chatbot
 
-app = FastAPI(title="SecureDesk DLP API", version="3.0.0")
+def try_import(name, from_path):
+    try:
+        import importlib
+        mod = importlib.import_module(from_path)
+        return mod.router, True
+    except Exception as e:
+        print(f"[WARN] {name} not loaded: {e}")
+        return None, False
 
-ORIGINS = [
-    "http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173",
-]
-if os.getenv("FRONTEND_URL"):
-    ORIGINS.append(os.getenv("FRONTEND_URL"))
+app = FastAPI(title="SecureDesk API", version="4.0.0")
+
+ORIGINS = ["http://localhost:5173","http://localhost:3000","http://127.0.0.1:5173"]
+if os.getenv("FRONTEND_URL"): ORIGINS.append(os.getenv("FRONTEND_URL"))
 
 app.add_middleware(
     CORSMiddleware,
@@ -19,20 +24,41 @@ app.add_middleware(
     allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
 )
 
-app.include_router(auth.router,        prefix="/api/auth",     tags=["Auth"])
-app.include_router(files.router,       prefix="/api/files",    tags=["Files"])
-app.include_router(admin.router,       prefix="/api/admin",    tags=["Admin"])
-app.include_router(profile.router,     prefix="/api/profile",  tags=["Profile"])
-app.include_router(phishing.router,    prefix="/api/phishing", tags=["Phishing"])
-app.include_router(chatbot.router,     prefix="/api/chat",     tags=["Chat"])
-app.include_router(analyze.router,     prefix="/api/dlp",      tags=["DLP"])
-app.include_router(ai_copilot.router,  prefix="/api/ai",       tags=["AI Copilot"])
+# Core — always on (auth never breaks)
+app.include_router(auth.router,     prefix="/api/auth",     tags=["Auth"])
+app.include_router(files.router,    prefix="/api/files",    tags=["Files"])
+app.include_router(admin.router,    prefix="/api/admin",    tags=["Admin"])
+app.include_router(profile.router,  prefix="/api/profile",  tags=["Profile"])
+app.include_router(phishing.router, prefix="/api/phishing", tags=["Phishing"])
+app.include_router(chatbot.router,  prefix="/api/chat",     tags=["Chat"])
+
+# Optional modules — skip gracefully if services/ folder missing
+optional_routes = [
+    ("DLP",           "routes.analyze",       "/api/dlp"),
+    ("AI Copilot",    "routes.ai_copilot",    "/api/ai"),
+    ("Organization",  "routes.organization",  "/api/org"),
+    ("Compliance",    "routes.compliance",    "/api/compliance"),
+    ("WhatsApp",      "routes.whatsapp",      "/api/whatsapp"),
+    ("Onboarding",    "routes.onboarding",    "/api/onboarding"),
+    ("Billing",       "routes.billing",       "/api/billing"),
+    ("Exports",       "routes.exports",       "/api/export"),
+    ("Notifications", "routes.notifications", "/api/notifications"),
+]
+
+for name, module_path, prefix in optional_routes:
+    router, ok = try_import(name, module_path)
+    if ok:
+        app.include_router(router, prefix=prefix, tags=[name])
 
 @app.on_event("startup")
 async def startup():
-    _get_model()
-    print("SecureDesk v3.0 DLP Platform — running")
+    try:
+        from ml.classifier import _get_model
+        _get_model()
+    except Exception as e:
+        print(f"[WARN] ML model: {e}")
+    print("SecureDesk v4.0 running — auth always active")
 
 @app.get("/")
 async def root():
-    return {"status": "SecureDesk API v3.0", "docs": "/docs"}
+    return {"status": "SecureDesk API v4.0", "docs": "/docs"}

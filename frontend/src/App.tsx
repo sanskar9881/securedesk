@@ -2,56 +2,80 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
-import LoginPage           from "./pages/LoginPage";
-import RegisterPage        from "./pages/RegisterPage";
-import ForgotPasswordPage  from "./pages/ForgotPasswordPage";
-import UserDashboard       from "./pages/UserDashboard";
-import FileSharePage       from "./pages/FileSharePage";
-import HistoryPage         from "./pages/HistoryPage";
-import AdminDashboard      from "./pages/AdminDashboard";
-import AdminUsersPage      from "./pages/AdminUsersPage";
-import ProfilePage         from "./pages/ProfilePage";
-import SettingsPage        from "./pages/SettingsPage";
-import LanguagePage        from "./pages/LanguagePage";
-import PrivacyPage         from "./pages/PrivacyPage";
-import PhishingPage        from "./pages/PhishingPage";
-import ChatPage            from "./pages/ChatPage";
-import DLPScanPage         from "./pages/DLPScanPage";
-import AICopilotPage       from "./pages/AICopilotPage";
-import ActivityLogsPage    from "./pages/ActivityLogsPage";
-import FileFingerprintPage from "./pages/FileFingerprintPage";
+
+import LandingPage          from "./pages/LandingPage";
+import LoginPage            from "./pages/LoginPage";
+import RegisterPage         from "./pages/RegisterPage";
+import ForgotPasswordPage   from "./pages/ForgotPasswordPage";
+import OnboardingPage       from "./pages/OnboardingPage";
+import UserDashboard        from "./pages/UserDashboard";
+import FileSharePage        from "./pages/FileSharePage";
+import HistoryPage          from "./pages/HistoryPage";
+import AdminDashboard       from "./pages/AdminDashboard";
+import AdminUsersPage       from "./pages/AdminUsersPage";
+import ProfilePage          from "./pages/ProfilePage";
+import SettingsPage         from "./pages/SettingsPage";
+import LanguagePage         from "./pages/LanguagePage";
+import PrivacyPage          from "./pages/PrivacyPage";
+import PhishingPage         from "./pages/PhishingPage";
+import ChatPage             from "./pages/ChatPage";
+import DLPScanPage          from "./pages/DLPScanPage";
+import AICopilotPage        from "./pages/AICopilotPage";
+import ActivityLogsPage     from "./pages/ActivityLogsPage";
+import FileFingerprintPage  from "./pages/FileFingerprintPage";
+import CompliancePage       from "./pages/CompliancePage";
+import UEBAPage             from "./pages/UEBAPage";
+import OrganizationPage     from "./pages/OrganizationPage";
+import WhatsAppLogsPage     from "./pages/WhatsAppLogsPage";
+import PricingPage          from "./pages/PricingPage";
 
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <Toaster position="top-right" toastOptions={{ style:{background:"#1f2937",color:"#f9fafb",border:"1px solid #374151"} }}/>
+        <Toaster position="top-right" toastOptions={{
+          style: { background: "#1f2937", color: "#f9fafb", border: "1px solid #374151" },
+          duration: 4000,
+        }}/>
         <Routes>
-          <Route path="/login"            element={<LoginPage/>}/>
-          <Route path="/register"         element={<RegisterPage/>}/>
-          <Route path="/forgot-password"  element={<ForgotPasswordPage/>}/>
+          {/* Public */}
+          <Route path="/"              element={<LandingPage />} />
+          <Route path="/login"         element={<LoginPage />} />
+          <Route path="/register"      element={<RegisterPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/pricing"       element={<PricingPage />} />
+          <Route path="/onboarding"    element={<ProtectedRoute><OnboardingPage /></ProtectedRoute>} />
 
-          <Route path="/dashboard"  element={<ProtectedRoute><UserDashboard/></ProtectedRoute>}/>
-          <Route path="/share"      element={<ProtectedRoute><FileSharePage/></ProtectedRoute>}/>
-          <Route path="/history"    element={<ProtectedRoute><HistoryPage/></ProtectedRoute>}/>
+          {/* User */}
+          <Route path="/dashboard"  element={<ProtectedRoute><UserDashboard /></ProtectedRoute>} />
+          <Route path="/share"      element={<ProtectedRoute><FileSharePage /></ProtectedRoute>} />
+          <Route path="/history"    element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
 
-          <Route path="/admin"        element={<ProtectedRoute role="admin"><AdminDashboard/></ProtectedRoute>}/>
-          <Route path="/admin/users"  element={<ProtectedRoute role="admin"><AdminUsersPage/></ProtectedRoute>}/>
+          {/* Admin */}
+          <Route path="/admin"       element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/users" element={<ProtectedRoute role="admin"><AdminUsersPage /></ProtectedRoute>} />
 
-          <Route path="/profile"           element={<ProtectedRoute><ProfilePage/></ProtectedRoute>}/>
-          <Route path="/settings"          element={<ProtectedRoute><SettingsPage/></ProtectedRoute>}/>
-          <Route path="/settings/language" element={<ProtectedRoute><LanguagePage/></ProtectedRoute>}/>
-          <Route path="/settings/privacy"  element={<ProtectedRoute><PrivacyPage/></ProtectedRoute>}/>
-          <Route path="/phishing"          element={<ProtectedRoute><PhishingPage/></ProtectedRoute>}/>
-          <Route path="/chat"              element={<ProtectedRoute><ChatPage/></ProtectedRoute>}/>
+          {/* Shared */}
+          <Route path="/profile"           element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+          <Route path="/settings"          element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+          <Route path="/settings/language" element={<ProtectedRoute><LanguagePage /></ProtectedRoute>} />
+          <Route path="/settings/privacy"  element={<ProtectedRoute><PrivacyPage /></ProtectedRoute>} />
+          <Route path="/phishing"          element={<ProtectedRoute><PhishingPage /></ProtectedRoute>} />
+          <Route path="/chat"              element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
 
-          <Route path="/dlp"          element={<ProtectedRoute><DLPScanPage/></ProtectedRoute>}/>
-          <Route path="/ai-copilot"   element={<ProtectedRoute><AICopilotPage/></ProtectedRoute>}/>
-          <Route path="/activity"     element={<ProtectedRoute><ActivityLogsPage/></ProtectedRoute>}/>
-          <Route path="/fingerprints" element={<ProtectedRoute><FileFingerprintPage/></ProtectedRoute>}/>
+          {/* DLP */}
+          <Route path="/dlp"          element={<ProtectedRoute><DLPScanPage /></ProtectedRoute>} />
+          <Route path="/ai-copilot"   element={<ProtectedRoute><AICopilotPage /></ProtectedRoute>} />
+          <Route path="/activity"     element={<ProtectedRoute><ActivityLogsPage /></ProtectedRoute>} />
+          <Route path="/fingerprints" element={<ProtectedRoute><FileFingerprintPage /></ProtectedRoute>} />
 
-          <Route path="/"  element={<Navigate to="/login" replace/>}/>
-          <Route path="*"  element={<Navigate to="/login" replace/>}/>
+          {/* Enterprise */}
+          <Route path="/compliance"    element={<ProtectedRoute><CompliancePage /></ProtectedRoute>} />
+          <Route path="/ueba"          element={<ProtectedRoute><UEBAPage /></ProtectedRoute>} />
+          <Route path="/organization"  element={<ProtectedRoute><OrganizationPage /></ProtectedRoute>} />
+          <Route path="/whatsapp-logs" element={<ProtectedRoute><WhatsAppLogsPage /></ProtectedRoute>} />
+
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
