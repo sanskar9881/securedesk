@@ -1,5 +1,6 @@
 import uuid
 import bcrypt
+import re
 from datetime import datetime, timedelta
 from typing import Optional
 import secrets
@@ -20,8 +21,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 class RegisterIn(BaseModel):
     name: str
-    email: Optional[str] = None
-    phone: Optional[str] = None
+    identifier: str
     password: str
 
 
@@ -84,19 +84,43 @@ async def admin_only(current_user=Depends(get_current_user)):
     return current_user
 
 
+def is_email(identifier: str) -> bool:
+    """Check if identifier is an email address."""
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return bool(re.match(email_pattern, identifier.strip()))
+
+
+def is_phone(identifier: str) -> bool:
+    """Check if identifier is a phone number (digits, spaces, +, -, parentheses)."""
+    phone_pattern = r'^[\d\s\+\-\(\)]+$'
+    cleaned = identifier.strip()
+    # Should have at least 7 digits to be considered a phone number
+    digit_count = sum(1 for c in cleaned if c.isdigit())
+    return bool(re.match(phone_pattern, cleaned)) and digit_count >= 7
+
+
 # ── Routes ────────────────────────────────────────────────────────
 
 @router.post("/register")
 async def register(body: RegisterIn):
-    if not body.email and not body.phone:
-        raise HTTPException(status_code=400, detail="Provide email or phone number")
-
+    # Determine if identifier is email or phone
+    email = None
+    phone = None
+    
+    if is_email(body.identifier):
+        email = body.identifier.strip().lower()
+    elif is_phone(body.identifier):
+        phone = body.identifier.strip()
+    else:
+        raise HTTPException(status_code=400, detail="Invalid email or phone number format")
+    
+    # Check if account already exists
     query = {}
-    if body.email:
-        query = {"email": body.email}
-    elif body.phone:
-        query = {"phone": body.phone}
-
+    if email:
+        query = {"email": email}
+    else:
+        query = {"phone": phone}
+    
     if await users_collection.find_one(query):
         raise HTTPException(status_code=400, detail="Account already exists with this email/phone")
 
@@ -107,8 +131,8 @@ async def register(body: RegisterIn):
     await users_collection.insert_one({
         "_id": uid,
         "name": body.name,
-        "email": body.email,
-        "phone": body.phone,
+        "email": email,
+        "phone": phone,
         "password": hash_pw(body.password),
         "role": role,
         "created_at": datetime.utcnow(),
