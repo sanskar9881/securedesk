@@ -22,7 +22,8 @@ class ProfileUpdate(BaseModel):
 async def get_profile(current_user=Depends(get_current_user)):
     created = current_user.get("created_at", datetime.utcnow())
     created_str = created.isoformat() if hasattr(created, "isoformat") else str(created)
-    return {
+    
+    response = {
         "id": current_user["_id"],
         "name": current_user["name"],
         "email": current_user.get("email"),
@@ -33,6 +34,29 @@ async def get_profile(current_user=Depends(get_current_user)):
         "language": current_user.get("language", "en"),
         "created_at": created_str,
     }
+    
+    # Add admin-specific stats if user is admin
+    if current_user["role"] == "admin":
+        total_users = await users_collection.count_documents({})
+        admin_count = await users_collection.count_documents({"role": "admin"})
+        manager_count = await users_collection.count_documents({"role": "manager"})
+        user_count = await users_collection.count_documents({"role": "user"})
+        total_transactions = await transactions_collection.count_documents({})
+        
+        response.update({
+            "is_admin": True,
+            "admin_stats": {
+                "total_users": total_users,
+                "admin_count": admin_count,
+                "manager_count": manager_count,
+                "user_count": user_count,
+                "total_transactions": total_transactions,
+            }
+        })
+    else:
+        response["is_admin"] = False
+    
+    return response
 
 
 @router.put("/me")

@@ -3,7 +3,7 @@ import Navbar from "../components/Navbar";
 import api from "../api/axios";
 import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
-import { Camera, Edit3, Save, X, Calendar, Mail, Phone, Shield, User, ArrowLeft } from "lucide-react";
+import { Camera, Edit3, Save, X, Calendar, Mail, Phone, Shield, User, ArrowLeft, Users, BarChart3, Settings, Lock, Globe } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const AVATAR_COLORS = [
@@ -12,9 +12,18 @@ const AVATAR_COLORS = [
   "#06b6d4","#3b82f6",
 ];
 
+interface AdminStats {
+  total_users: number;
+  admin_count: number;
+  manager_count: number;
+  user_count: number;
+  total_transactions: number;
+}
+
 interface Profile {
   id: string; name: string; email?: string; phone?: string;
   role: string; dob: string; avatar_color: string; language: string; created_at: string;
+  is_admin?: boolean; admin_stats?: AdminStats;
 }
 
 export default function ProfilePage() {
@@ -92,12 +101,12 @@ export default function ProfilePage() {
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-white">My Profile</h1>
-            <p className="text-gray-500 text-sm mt-0.5">Manage your personal information and preferences</p>
+            <h1 className="text-2xl font-bold text-white">{profile.is_admin ? "Admin Profile" : "My Profile"}</h1>
+            <p className="text-gray-500 text-sm mt-0.5">{profile.is_admin ? "Manage platform and organization settings" : "Manage your personal information and preferences"}</p>
           </div>
         </div>
 
-        <div className="max-w-2xl space-y-5">
+        <div className="max-w-4xl space-y-5">
           {/* Avatar Card */}
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
             <div className="flex items-center gap-5">
@@ -157,6 +166,82 @@ export default function ProfilePage() {
               </button>
             </div>
           </div>
+
+          {/* Admin Stats Dashboard (Only for Admin) */}
+          {profile.is_admin && profile.admin_stats && (
+            <div className="bg-gradient-to-br from-amber-900/20 to-amber-900/5 border border-amber-700/30 rounded-2xl p-6">
+              <h3 className="text-white font-semibold mb-5 flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-amber-400" />
+                Platform Overview
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                <div className="bg-gray-800/40 rounded-xl p-4 border border-gray-700/40">
+                  <p className="text-gray-400 text-xs uppercase tracking-wider font-medium">Total Users</p>
+                  <p className="text-white text-2xl font-bold mt-2">{profile.admin_stats.total_users}</p>
+                </div>
+                <div className="bg-gray-800/40 rounded-xl p-4 border border-gray-700/40">
+                  <p className="text-gray-400 text-xs uppercase tracking-wider font-medium">Admins</p>
+                  <p className="text-amber-400 text-2xl font-bold mt-2">{profile.admin_stats.admin_count}</p>
+                </div>
+                <div className="bg-gray-800/40 rounded-xl p-4 border border-gray-700/40">
+                  <p className="text-gray-400 text-xs uppercase tracking-wider font-medium">Managers</p>
+                  <p className="text-purple-400 text-2xl font-bold mt-2">{profile.admin_stats.manager_count}</p>
+                </div>
+                <div className="bg-gray-800/40 rounded-xl p-4 border border-gray-700/40">
+                  <p className="text-gray-400 text-xs uppercase tracking-wider font-medium">Employees</p>
+                  <p className="text-teal-400 text-2xl font-bold mt-2">{profile.admin_stats.user_count}</p>
+                </div>
+                <div className="bg-gray-800/40 rounded-xl p-4 border border-gray-700/40">
+                  <p className="text-gray-400 text-xs uppercase tracking-wider font-medium">Transactions</p>
+                  <p className="text-indigo-400 text-2xl font-bold mt-2">{profile.admin_stats.total_transactions}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Admin Management Section */}
+          {profile.is_admin && (
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
+              <h3 className="text-white font-semibold mb-5 flex items-center gap-2">
+                <Settings className="w-5 h-5 text-indigo-400" />
+                Admin Controls
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button onClick={() => navigate("/admin")}
+                  className="flex items-center gap-3 bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-indigo-600 rounded-xl p-4 transition text-left group">
+                  <Users className="w-5 h-5 text-indigo-400 group-hover:text-indigo-300" />
+                  <div>
+                    <p className="text-white font-medium">Manage Users</p>
+                    <p className="text-gray-500 text-xs">Add, edit, or remove users</p>
+                  </div>
+                </button>
+                <button onClick={() => navigate("/admin")}
+                  className="flex items-center gap-3 bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-purple-600 rounded-xl p-4 transition text-left group">
+                  <BarChart3 className="w-5 h-5 text-purple-400 group-hover:text-purple-300" />
+                  <div>
+                    <p className="text-white font-medium">Analytics</p>
+                    <p className="text-gray-500 text-xs">View detailed platform analytics</p>
+                  </div>
+                </button>
+                <button onClick={() => navigate("/admin")}
+                  className="flex items-center gap-3 bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-amber-600 rounded-xl p-4 transition text-left group">
+                  <Settings className="w-5 h-5 text-amber-400 group-hover:text-amber-300" />
+                  <div>
+                    <p className="text-white font-medium">Settings</p>
+                    <p className="text-gray-500 text-xs">Configure platform settings</p>
+                  </div>
+                </button>
+                <button onClick={() => navigate("/admin")}
+                  className="flex items-center gap-3 bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-red-600 rounded-xl p-4 transition text-left group">
+                  <Lock className="w-5 h-5 text-red-400 group-hover:text-red-300" />
+                  <div>
+                    <p className="text-white font-medium">Security</p>
+                    <p className="text-gray-500 text-xs">Manage security and access control</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Info Card */}
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
