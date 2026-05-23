@@ -1,9 +1,10 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { Loader2 } from "lucide-react";
 
 interface Props {
   children: React.ReactNode;
-  role?: "user" | "admin";
+  role?: "admin" | "manager";  // if set, restricts to that role+
 }
 
 export default function ProtectedRoute({ children, role }: Props) {
@@ -11,15 +12,18 @@ export default function ProtectedRoute({ children, role }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-950">
-        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-indigo-500" />
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-indigo-400 animate-spin"/>
       </div>
     );
   }
 
   if (!user) return <Navigate to="/login" replace />;
-  if (role === "admin" && user.role !== "admin")
+
+  // Role-based protection
+  if (role === "admin" && !["admin","manager"].includes(user.role)) {
     return <Navigate to="/dashboard" replace />;
+  }
 
   return <>{children}</>;
 }

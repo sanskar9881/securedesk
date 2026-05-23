@@ -1,209 +1,177 @@
-import uuid
-import bcrypt
-import re
+import re, uuid, bcrypt
 from datetime import datetime, timedelta
-from typing import Optional
-import secrets
-
 from fastapi import APIRouter, HTTPException, Depends
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import jwt, JWTError
 from pydantic import BaseModel
-from jose import JWTError, jwt
-
-from database import users_collection, reset_tokens_collection
+from database import db, users_collection, reset_tokens_collection
 from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 
 router = APIRouter()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+bearer = HTTPBearer()
+
+EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$')
+PHONE_RE = re.compile(r'^[6-9]\d{9}$')
 
 
-# ── Pydantic schemas ──────────────────────────────────────────────
+def is_email(s: str) -> bool:
+    return bool(EMAIL_RE.match(s.strip()))
 
-class RegisterIn(BaseModel):
+def is_phone(s: str) -> bool:
+    cleaned = re.sub(r'[\s\-\(\)\+]', '', s.strip())
+    if cleaned.startswith('91') and len(cleaned) == 12:
+        cleaned = cleaned[2:]
+    return bool(PHONE_RE.match(cleaned))
+
+def clean_id(s: str) -> str:
+    s = s.strip()
+    if is_email(s):
+        return s.lower()
+    cleaned = re.sub(r'[\s\-\(\)\+]', '', s)
+    if cleaned.startswith('91') and len(cleaned) == 12:
+        cleaned = cleaned[2:]
+    return cleaned
+
+
+class RegisterBody(BaseModel):
     name: str
     identifier: str
     password: str
+    role: str = "user"
 
-
-class LoginIn(BaseModel):
+class LoginBody(BaseModel):
     identifier: str
     password: str
 
 
-class ForgotIn(BaseModel):
-    identifier: str
+def make_token(user_id: str, role: str) -> str:
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    return jwt.encode({"sub": user_id, "role": role, "exp": expire}, SECRET_KEY, algorithm=ALGORITHM)
 
 
-class ResetIn(BaseModel):
-    token: str
-    new_password: str
-
-
-# ── Helpers ───────────────────────────────────────────────────────
-
-def hash_pw(pw: str) -> str:
-    """Hash password using bcrypt directly (no passlib)."""
-    pw_bytes = pw.encode("utf-8")
-    salt = bcrypt.gensalt(rounds=12)
-    hashed = bcrypt.hashpw(pw_bytes, salt)
-    return hashed.decode("utf-8")
-
-
-def verify_pw(plain: str, hashed: str) -> bool:
-    """Verify password using bcrypt directly (no passlib)."""
+async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(bearer)):
     try:
-        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
-    except Exception:
-        return False
-
-
-def make_token(data: dict) -> str:
-    payload = data.copy()
-    payload["exp"] = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
-
-
-async def get_current_user(token: str = Depends(oauth2_scheme)):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid token")
+        payload = jwt.decode(creds.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        uid = payload.get("sub")
+        if not uid:
+            raise HTTPException(401, "Invalid token")
     except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-    user = await users_collection.find_one({"_id": user_id})
+        raise HTTPException(401, "Token expired or invalid — please login again")
+    user = await users_collection.find_one({"_id": uid})
     if not user:
-        raise HTTPException(status_code=401, detail="User not found")
+        raise HTTPException(401, "User not found")
     return user
 
 
-async def admin_only(current_user=Depends(get_current_user)):
-    if current_user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-    return current_user
-
-
-def is_email(identifier: str) -> bool:
-    """Check if identifier is an email address."""
-    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    return bool(re.match(email_pattern, identifier.strip()))
-
-
-def is_phone(identifier: str) -> bool:
-    """Check if identifier is a phone number (digits, spaces, +, -, parentheses)."""
-    phone_pattern = r'^[\d\s\+\-\(\)]+$'
-    cleaned = identifier.strip()
-    # Should have at least 7 digits to be considered a phone number
-    digit_count = sum(1 for c in cleaned if c.isdigit())
-    return bool(re.match(phone_pattern, cleaned)) and digit_count >= 7
-
-
-# ── Routes ────────────────────────────────────────────────────────
-
 @router.post("/register")
-async def register(body: RegisterIn):
-    # Determine if identifier is email or phone
-    email = None
-    phone = None
-    
-    if is_email(body.identifier):
-        email = body.identifier.strip().lower()
-    elif is_phone(body.identifier):
-        phone = body.identifier.strip()
-    else:
-        raise HTTPException(status_code=400, detail="Invalid email or phone number format")
-    
-    # Check if account already exists
-    query = {}
-    if email:
-        query = {"email": email}
-    else:
-        query = {"phone": phone}
-    
-    if await users_collection.find_one(query):
-        raise HTTPException(status_code=400, detail="Account already exists with this email/phone")
+async def register(body: RegisterBody):
+    ident = body.identifier.strip()
 
-    count = await users_collection.count_documents({})
-    role = "admin" if count == 0 else "user"
+    if not ident:
+        raise HTTPException(400, "Enter your email or phone number")
 
-    uid = str(uuid.uuid4())
-    await users_collection.insert_one({
-        "_id": uid,
-        "name": body.name,
-        "email": email,
-        "phone": phone,
-        "password": hash_pw(body.password),
-        "role": role,
-        "created_at": datetime.utcnow(),
+    # Accept ANYTHING as identifier — just must not be empty
+    # But give a hint if it looks wrong
+    if len(ident) < 3:
+        raise HTTPException(400, "Enter a valid email or 10-digit phone number")
+
+    # Check if it looks like neither email nor phone — still allow but warn
+    looks_like_email = "@" in ident
+    looks_like_phone = ident.replace(" ","").replace("+","").replace("-","").isdigit()
+
+    if not looks_like_email and not looks_like_phone:
+        raise HTTPException(400, f"'{ident}' doesn't look like an email or phone. Try: you@gmail.com or 9876543210")
+
+    identifier_clean = clean_id(ident)
+
+    if not body.name or len(body.name.strip()) < 2:
+        raise HTTPException(400, "Enter your full name")
+
+    if not body.password or len(body.password) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
+
+    role = body.role.lower() if body.role.lower() in ("user","manager","admin") else "user"
+
+    # Check duplicate
+    existing = await users_collection.find_one({
+        "$or": [{"email": identifier_clean}, {"phone": identifier_clean},
+                {"email": ident.lower()}, {"phone": ident}]
     })
+    if existing:
+        raise HTTPException(400, "Account already exists with this email/phone. Please login.")
 
-    token = make_token({"sub": uid, "role": role, "name": body.name})
-    return {"access_token": token, "token_type": "bearer", "role": role, "name": body.name}
+    pw_hash = bcrypt.hashpw(body.password.encode(), bcrypt.gensalt()).decode()
+    uid = str(uuid.uuid4())
+
+    doc = {
+        "_id": uid, "name": body.name.strip(), "role": role,
+        "password": pw_hash, "avatar_color": "#6366f1",
+        "language": "en", "created_at": datetime.utcnow(), "dob": "",
+        "email": identifier_clean if looks_like_email else "",
+        "phone": identifier_clean if looks_like_phone else "",
+    }
+    await users_collection.insert_one(doc)
+    token = make_token(uid, role)
+    return {"access_token": token, "token_type": "bearer", "role": role, "name": body.name.strip(), "user_id": uid}
 
 
 @router.post("/login")
-async def login(body: LoginIn):
-    user = await users_collection.find_one({
-        "$or": [{"email": body.identifier}, {"phone": body.identifier}]
-    })
-    if not user or not verify_pw(body.password, user["password"]):
-        raise HTTPException(status_code=401, detail="Invalid email/phone or password")
+async def login(body: LoginBody):
+    ident = body.identifier.strip()
+    if not ident:
+        raise HTTPException(400, "Enter your email or phone")
 
-    token = make_token({"sub": user["_id"], "role": user["role"], "name": user["name"]})
-    return {"access_token": token, "token_type": "bearer", "role": user["role"], "name": user["name"]}
+    cid = clean_id(ident)
+    user = await users_collection.find_one({
+        "$or": [
+            {"email": cid}, {"phone": cid},
+            {"email": ident.lower()}, {"phone": ident},
+            {"email": ident}, {"phone": cid},
+        ]
+    })
+
+    if not user:
+        raise HTTPException(401, "No account found. Check your email/phone or register first.")
+
+    try:
+        ok = bcrypt.checkpw(body.password.encode(), user["password"].encode())
+    except Exception:
+        ok = False
+
+    if not ok:
+        raise HTTPException(401, "Wrong password. Try again.")
+
+    token = make_token(user["_id"], user["role"])
+    return {"access_token": token, "token_type": "bearer", "role": user["role"], "name": user["name"], "user_id": user["_id"]}
 
 
 @router.post("/forgot-password")
-async def forgot_password(body: ForgotIn):
-    user = await users_collection.find_one({
-        "$or": [{"email": body.identifier}, {"phone": body.identifier}]
-    })
+async def forgot_password(body: dict):
+    ident = (body.get("identifier") or "").strip()
+    cid   = clean_id(ident)
+    user  = await users_collection.find_one({"$or": [{"email": cid}, {"phone": cid}]})
     if not user:
-        return {"message": "If an account exists, a reset token has been generated"}
-
-    reset_token = secrets.token_urlsafe(32)
+        raise HTTPException(404, "No account found with this email/phone")
+    tok = str(uuid.uuid4())
     await reset_tokens_collection.insert_one({
-        "token": reset_token,
-        "user_id": user["_id"],
+        "_id": tok, "user_id": user["_id"],
+        "created_at": datetime.utcnow(),
         "expires_at": datetime.utcnow() + timedelta(hours=1),
         "used": False,
     })
-
-    # In production: send via email/SMS (SendGrid / Twilio)
-    return {
-        "message": "Reset token generated (shown here for development only)",
-        "reset_token": reset_token,
-    }
+    return {"message": "Reset token created", "token": tok}
 
 
 @router.post("/reset-password")
-async def reset_password(body: ResetIn):
-    record = await reset_tokens_collection.find_one({
-        "token": body.token,
-        "used": False,
-        "expires_at": {"$gt": datetime.utcnow()},
-    })
-    if not record:
-        raise HTTPException(status_code=400, detail="Invalid or expired token")
-
-    await users_collection.update_one(
-        {"_id": record["user_id"]},
-        {"$set": {"password": hash_pw(body.new_password)}}
-    )
-    await reset_tokens_collection.update_one(
-        {"_id": record["_id"]},
-        {"$set": {"used": True}}
-    )
-    return {"message": "Password updated successfully"}
-
-
-@router.get("/me")
-async def get_me(current_user=Depends(get_current_user)):
-    return {
-        "id": current_user["_id"],
-        "name": current_user["name"],
-        "email": current_user.get("email"),
-        "phone": current_user.get("phone"),
-        "role": current_user["role"],
-    }
+async def reset_password(body: dict):
+    tok = (body.get("token") or "").strip()
+    pw  = (body.get("new_password") or "").strip()
+    if not tok or len(pw) < 6:
+        raise HTTPException(400, "Token and password (min 6 chars) required")
+    doc = await reset_tokens_collection.find_one({"_id": tok, "used": False})
+    if not doc or doc["expires_at"] < datetime.utcnow():
+        raise HTTPException(400, "Invalid or expired token")
+    ph = bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
+    await users_collection.update_one({"_id": doc["user_id"]}, {"$set": {"password": ph}})
+    await reset_tokens_collection.update_one({"_id": tok}, {"$set": {"used": True}})
+    return {"message": "Password changed successfully"}

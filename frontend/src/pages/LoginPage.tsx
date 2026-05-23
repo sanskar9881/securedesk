@@ -1,121 +1,116 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useNavigate, Link } from "react-router-dom";
 import api from "../api/axios";
+import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
-import { Shield, Eye, EyeOff, Lock } from "lucide-react";
+import { Shield, Eye, EyeOff, Mail, Lock, Loader2 } from "lucide-react";
 
 export default function LoginPage() {
-  const [identifier, setIdentifier] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPw, setShowPw] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
-  const navigate = useNavigate();
+  const { login }  = useAuth();
+  const navigate   = useNavigate();
+  const [id, setId]    = useState("");
+  const [pw, setPw]    = useState("");
+  const [show, setShow]= useState(false);
+  const [load, setLoad]= useState(false);
+  const [err, setErr]  = useState("");
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  const doLogin = async () => {
+    setErr("");
+    if (!id.trim()) { setErr("Enter your email or phone number"); return; }
+    if (!pw)        { setErr("Enter your password"); return; }
+    setLoad(true);
     try {
-      const { data } = await api.post("/auth/login", { identifier, password });
-      login(data.access_token, data.role, data.name);
+      const { data } = await api.post("/auth/login", { identifier: id.trim(), password: pw });
+
+      // ✅ KEY FIX: pass user_id to login so it's stored
+      login(data.access_token, data.role, data.name, data.user_id || "");
+
       toast.success(`Welcome back, ${data.name}!`);
-      navigate(data.role === "admin" ? "/admin" : "/dashboard");
-    } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } };
-      toast.error(error.response?.data?.detail || "Login failed. Check credentials.");
-    } finally {
-      setLoading(false);
-    }
+
+      // ✅ KEY FIX: redirect based on ACTUAL role from API response
+      const role = (data.role || "user").toLowerCase();
+      if (role === "admin" || role === "manager") {
+        navigate("/admin");
+      } else {
+        navigate("/dashboard");
+      }
+    } catch (e: any) {
+      setErr(e.response?.data?.detail || "Login failed. Check your credentials.");
+    } finally { setLoad(false); }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-indigo-950 to-gray-950 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-600 rounded-2xl mb-4 shadow-lg shadow-indigo-500/25">
-            <Shield className="w-8 h-8 text-white" />
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-2xl shadow-indigo-500/30 mb-4">
+            <Shield className="w-8 h-8 text-white"/>
           </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">SecureDesk</h1>
-          <p className="text-gray-500 mt-1 text-sm">AI-Powered Data Protection Platform</p>
+          <h1 className="text-2xl font-bold text-white">Sign In to SecureDesk</h1>
+          <p className="text-gray-500 text-sm mt-1">AI-Powered Data Loss Prevention</p>
         </div>
 
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl">
-          <h2 className="text-xl font-semibold text-white mb-2">Sign In</h2>
-          <p className="text-gray-500 text-sm mb-6">
-            Use email or phone. Role is detected automatically.
-          </p>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          {err && (
+            <div className="bg-red-950/40 border border-red-800/50 rounded-xl px-4 py-3 mb-5 flex items-start gap-2">
+              <span className="text-red-400 text-lg flex-shrink-0">⚠️</span>
+              <p className="text-red-400 text-sm">{err}</p>
+            </div>
+          )}
+
+          <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1.5">
-                Email or Phone Number
-              </label>
-              <input
-                type="text"
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                placeholder="you@company.com or +91XXXXXXXXXX"
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
-                required
-              />
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Email or Phone</label>
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600"/>
+                <input value={id} onChange={e => { setId(e.target.value); setErr(""); }}
+                  onKeyDown={e => e.key==="Enter" && doLogin()}
+                  placeholder="you@company.com  or  9876543210"
+                  autoFocus autoComplete="username"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-10 pr-4 py-3 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition"/>
+              </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1.5">Password</label>
+              <div className="flex justify-between mb-1.5">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Password</label>
+                <Link to="/forgot-password" className="text-xs text-indigo-400 hover:text-indigo-300 transition">Forgot password?</Link>
+              </div>
               <div className="relative">
-                <input
-                  type={showPw ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 pr-12 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPw(!showPw)}
-                  className="absolute right-3 top-3.5 text-gray-500 hover:text-gray-300 transition"
-                >
-                  {showPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600"/>
+                <input type={show?"text":"password"} value={pw}
+                  onChange={e => { setPw(e.target.value); setErr(""); }}
+                  onKeyDown={e => e.key==="Enter" && doLogin()}
+                  placeholder="Your password" autoComplete="current-password"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-10 pr-12 py-3 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition"/>
+                <button type="button" onClick={() => setShow(!show)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400">
+                  {show ? <EyeOff className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
                 </button>
               </div>
             </div>
 
-            <div className="flex justify-end">
-              <Link to="/forgot-password" className="text-indigo-400 hover:text-indigo-300 text-sm transition">
-                Forgot password?
-              </Link>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition"
-            >
-              {loading ? (
-                <span className="animate-spin rounded-full h-4 w-4 border-t-2 border-white" />
-              ) : (
-                <Lock className="w-4 h-4" />
-              )}
-              {loading ? "Signing in..." : "Sign In"}
+            <button onClick={doLogin} disabled={load}
+              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 text-white py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition shadow-lg shadow-indigo-500/20">
+              {load ? <Loader2 className="w-4 h-4 animate-spin"/> : <Shield className="w-4 h-4"/>}
+              {load ? "Signing in..." : "Sign In"}
             </button>
-          </form>
+          </div>
 
-          <p className="text-center text-gray-600 text-sm mt-6">
-            New to SecureDesk?{" "}
-            <Link to="/register" className="text-indigo-400 hover:text-indigo-300 font-medium transition">
-              Create account
-            </Link>
-          </p>
+          <div className="mt-5 p-3 bg-indigo-950/30 border border-indigo-800/30 rounded-xl">
+            <p className="text-xs text-gray-500">
+              <span className="text-indigo-400 font-medium">Admin?</span> Use the email/phone you registered with Admin role.
+              Not registered yet? <Link to="/register" className="text-indigo-400 underline">Create admin account →</Link>
+            </p>
+          </div>
         </div>
 
-        <p className="text-center text-gray-700 text-xs mt-4">
-          First registered user is automatically assigned admin role
+        <p className="text-center text-gray-600 text-sm mt-6">
+          New user?{" "}
+          <Link to="/register" className="text-indigo-400 hover:text-indigo-300 font-medium">Create account</Link>
         </p>
-        <p className="text-center text-gray-700 text-xs mt-1">
-          Built with love from Sanskar Hadole ❤️
-        </p>
+        <p className="text-center text-gray-700 text-xs mt-3">Built with love from Sanskar Hadole ❤️</p>
       </div>
     </div>
   );
