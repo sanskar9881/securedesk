@@ -3,7 +3,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from "react
 interface User {
   id: string;
   name: string;
-  role: string;   // "admin" | "manager" | "user"
+  role: "admin" | "manager" | "user";
   token: string;
   avatar_color: string;
   language: string;
@@ -16,76 +16,82 @@ interface AuthCtx {
   login: (token: string, role: string, name: string, userId?: string) => void;
   logout: () => void;
   loading: boolean;
-  updateUser: (fields: Partial<User>) => void;
+  updateUser: (f: Partial<User>) => void;
   darkMode: boolean;
   toggleDarkMode: () => void;
   language: string;
-  setLanguage: (lang: string) => void;
-  t: (key: string) => string;
+  setLanguage: (l: string) => void;
+  t: (k: string) => string;
 }
 
 const AuthContext = createContext<AuthCtx | null>(null);
 
-const TRANSLATIONS: Record<string, Record<string, string>> = {
+const TR: Record<string, Record<string, string>> = {
   en: {
-    dashboard:"Dashboard", send_file:"Send File", history:"My History",
-    phishing:"Phishing Detector", ai_assistant:"AI Assistant", users:"Users",
-    sign_out:"Sign out", profile:"Profile", settings:"Settings",
-    language:"Language", privacy_center:"Privacy Center",
-    total_sent:"Total Sent", legitimate:"Legitimate", suspicious:"Suspicious",
-  },
-  hi: {
-    dashboard:"डैशबोर्ड", send_file:"फ़ाइल भेजें", history:"मेरा इतिहास",
-    phishing:"फ़िशिंग डिटेक्टर", ai_assistant:"AI सहायक", users:"उपयोगकर्ता",
-    sign_out:"साइन आउट", profile:"प्रोफ़ाइल", settings:"सेटिंग्स",
-    language:"भाषा", privacy_center:"गोपनीयता केंद्र",
-    total_sent:"कुल भेजा", legitimate:"वैध", suspicious:"संदिग्ध",
+    dashboard: "Dashboard", send_file: "Send File", history: "My History",
+    phishing: "Phishing Detector", ai_assistant: "AI Assistant", users: "Users",
+    sign_out: "Sign out", profile: "Profile", settings: "Settings",
+    language: "Language", privacy_center: "Privacy Center",
+    total_sent: "Total Sent", legitimate: "Legitimate", suspicious: "Suspicious",
+    platform_overview: "Platform Overview", recent_transactions: "Recent Transactions",
+    no_transactions: "No transactions yet", total_users: "Total Users",
+    admins: "Admins", transactions: "Transactions", avg_risk: "Avg Risk",
+    regular_users: "Regular Users", send_first: "Send your first file →",
+    welcome_back: "Welcome back",
   },
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser]     = useState<User | null>(null);
-  const [loading, setLoad]  = useState(true);
-  const [darkMode, setDark] = useState<boolean>(() => {
-    return localStorage.getItem("darkMode") !== "false";
-  });
-  const [language, setLangState] = useState(() => localStorage.getItem("language") || "en");
+  const [user, setUser]   = useState<User | null>(null);
+  const [loading, setLoad]= useState(true);
+  const [darkMode, setDark]= useState(() => localStorage.getItem("darkMode") !== "false");
+  const [language, setLang]= useState(() => localStorage.getItem("language") || "en");
 
-  // Apply dark/light mode class
   useEffect(() => {
     document.documentElement.classList.toggle("light-mode", !darkMode);
     document.body.classList.toggle("light-mode", !darkMode);
   }, [darkMode]);
 
-  // Restore session on page load
   useEffect(() => {
     const token  = localStorage.getItem("token");
-    const role   = localStorage.getItem("role");
+    const role   = (localStorage.getItem("role") || "user") as User["role"];
     const name   = localStorage.getItem("name");
     const id     = localStorage.getItem("user_id") || "";
     const color  = localStorage.getItem("avatar_color") || "#6366f1";
     const lang   = localStorage.getItem("language") || "en";
-    const org_id = localStorage.getItem("org_id") || "";
-    const org_name = localStorage.getItem("org_name") || "";
 
-    if (token && role && name) {
-      setUser({ id, token, role, name, avatar_color: color, language: lang, org_id, org_name });
+    if (token && name) {
+      setUser({ id, token, role, name, avatar_color: color, language: lang });
     }
     setLoad(false);
   }, []);
 
   const login = (token: string, role: string, name: string, userId = "") => {
-    const cleanRole = (role || "user").toLowerCase().trim();
-    localStorage.setItem("token",     token);
-    localStorage.setItem("role",      cleanRole);
-    localStorage.setItem("name",      name);
-    localStorage.setItem("user_id",   userId);
+    // Sanitize role — must be one of three valid values
+    const validRoles = ["admin", "manager", "user"];
+    const cleanRole  = validRoles.includes(role?.toLowerCase())
+      ? (role.toLowerCase() as User["role"])
+      : "user";
+
+    localStorage.setItem("token",        token);
+    localStorage.setItem("role",         cleanRole);
+    localStorage.setItem("name",         name);
+    localStorage.setItem("user_id",      userId);
     localStorage.setItem("avatar_color", "#6366f1");
-    setUser({ id: userId, token, role: cleanRole, name, avatar_color: "#6366f1", language: "en" });
+
+    setUser({
+      id:           userId,
+      token,
+      role:         cleanRole,
+      name,
+      avatar_color: "#6366f1",
+      language:     "en",
+    });
   };
 
   const logout = () => {
-    ["token","role","name","user_id","avatar_color","org_id","org_name"].forEach(k => localStorage.removeItem(k));
+    ["token","role","name","user_id","avatar_color","org_id","org_name"]
+      .forEach(k => localStorage.removeItem(k));
     setUser(null);
   };
 
@@ -93,29 +99,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(prev => {
       if (!prev) return prev;
       const next = { ...prev, ...fields };
-      if (fields.name)         localStorage.setItem("name", fields.name);
+      if (fields.name)         localStorage.setItem("name",         fields.name);
       if (fields.avatar_color) localStorage.setItem("avatar_color", fields.avatar_color);
-      if (fields.language)     localStorage.setItem("language", fields.language);
-      if (fields.org_id)       localStorage.setItem("org_id", fields.org_id);
-      if (fields.org_name)     localStorage.setItem("org_name", fields.org_name);
+      if (fields.language)     localStorage.setItem("language",     fields.language);
+      if (fields.org_id)       localStorage.setItem("org_id",       fields.org_id!);
+      if (fields.org_name)     localStorage.setItem("org_name",     fields.org_name!);
       return next;
     });
   };
 
-  const toggleDarkMode = () => {
-    setDark(prev => {
-      localStorage.setItem("darkMode", String(!prev));
-      return !prev;
-    });
+  const toggleDarkMode = () =>
+    setDark(p => { localStorage.setItem("darkMode", String(!p)); return !p; });
+
+  const setLanguage = (l: string) => {
+    setLang(l);
+    localStorage.setItem("language", l);
   };
 
-  const setLanguage = (lang: string) => {
-    setLangState(lang);
-    localStorage.setItem("language", lang);
-  };
-
-  const t = (key: string) =>
-    TRANSLATIONS[language]?.[key] || TRANSLATIONS["en"]?.[key] || key;
+  const t = (k: string) => TR[language]?.[k] ?? TR["en"]?.[k] ?? k;
 
   return (
     <AuthContext.Provider value={{
@@ -128,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be inside AuthProvider");
-  return ctx;
+  const c = useContext(AuthContext);
+  if (!c) throw new Error("useAuth must be inside AuthProvider");
+  return c;
 };

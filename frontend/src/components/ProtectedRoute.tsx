@@ -4,7 +4,7 @@ import { Loader2 } from "lucide-react";
 
 interface Props {
   children: React.ReactNode;
-  role?: "admin" | "manager";  // if set, restricts to that role+
+  role?: "admin" | "manager";
 }
 
 export default function ProtectedRoute({ children, role }: Props) {
@@ -20,7 +20,6 @@ export default function ProtectedRoute({ children, role }: Props) {
 
   if (!user) return <Navigate to="/login" replace />;
 
-  // Role-based protection
   if (role === "admin" && !["admin","manager"].includes(user.role)) {
     return <Navigate to="/dashboard" replace />;
   }
