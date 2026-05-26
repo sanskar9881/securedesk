@@ -3,16 +3,26 @@ import { useNavigate, Link } from "react-router-dom";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
-import { Shield, Eye, EyeOff, Mail, Lock, Loader2 } from "lucide-react";
+import { Shield, Eye, EyeOff, Mail, Lock, Loader2, ChevronDown } from "lucide-react";
+
+type Role = "user" | "manager" | "admin";
 
 export default function LoginPage() {
   const { login }  = useAuth();
   const navigate   = useNavigate();
   const [id, setId]    = useState("");
   const [pw, setPw]    = useState("");
+  const [role, setRole] = useState<Role>("user");
+  const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [show, setShow]= useState(false);
   const [load, setLoad]= useState(false);
   const [err, setErr]  = useState("");
+
+  const roles: { role: Role; label: string; icon: string }[] = [
+    { role: "user", label: "Employee", icon: "👤" },
+    { role: "manager", label: "Manager", icon: "👔" },
+    { role: "admin", label: "Admin", icon: "🏢" },
+  ];
 
   const doLogin = async () => {
     setErr("");
@@ -25,12 +35,18 @@ export default function LoginPage() {
       });
 
       // Store role exactly as returned from backend
-      const role = (data.role || "user").toLowerCase();
-      login(data.access_token, role, data.name, data.user_id || "");
+      const serverRole = (data.role || "user").toLowerCase() as Role;
+      
+      // Show message about actual role from server
+      if (serverRole !== role) {
+        toast.info(`Account role is ${serverRole}. Logging in as ${serverRole}.`);
+      }
+      
+      login(data.access_token, serverRole, data.name, data.user_id || "");
       toast.success(`Welcome back, ${data.name}!`);
 
       // Redirect based on role
-      if (role === "admin" || role === "manager") {
+      if (serverRole === "admin" || serverRole === "manager") {
         navigate("/admin");
       } else {
         navigate("/dashboard");
@@ -62,6 +78,44 @@ export default function LoginPage() {
           )}
 
           <div className="space-y-4">
+            {/* Role Selection */}
+            <div className="relative">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                Login As (Optional — role will be verified at login)
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowRoleMenu(!showRoleMenu)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white text-sm flex items-center justify-between hover:border-indigo-600 transition"
+              >
+                <span className="flex items-center gap-2">
+                  <span>{roles.find(r => r.role === role)?.icon}</span>
+                  <span>{roles.find(r => r.role === role)?.label}</span>
+                </span>
+                <ChevronDown className={`w-4 h-4 transition ${showRoleMenu ? "rotate-180" : ""}`} />
+              </button>
+              {showRoleMenu && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-gray-800 border border-gray-700 rounded-xl z-10 overflow-hidden">
+                  {roles.map(r => (
+                    <button
+                      key={r.role}
+                      onClick={() => {
+                        setRole(r.role);
+                        setShowRoleMenu(false);
+                      }}
+                      className={`w-full text-left px-4 py-2.5 text-sm hover:bg-indigo-600/20 transition flex items-center gap-2 ${
+                        role === r.role ? "bg-indigo-600/30 text-indigo-400" : "text-gray-300"
+                      }`}
+                    >
+                      <span>{r.icon}</span>
+                      <span>{r.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <p className="text-gray-600 text-xs mt-1">Your actual role will be verified from your account</p>
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
                 Email or Phone Number
