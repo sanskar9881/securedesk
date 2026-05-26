@@ -45,6 +45,13 @@ async def get_current_user(
     return user
 
 
+async def admin_only(user=Depends(get_current_user)):
+    """Dependency to restrict access to admin users only."""
+    if user.get("role") not in ("admin", "manager"):
+        raise HTTPException(403, "Admin access required")
+    return user
+
+
 class RegisterBody(BaseModel):
     name:       str
     identifier: str
@@ -82,7 +89,13 @@ async def register(body: RegisterBody):
     # ── Role — TRUST WHAT THE USER SENDS ────────────────────────
     # No override. If user selects Admin, they get Admin.
     valid_roles = {"user", "manager", "admin"}
-    role = body.role.lower().strip() if body.role.lower().strip() in valid_roles else "user"
+    role_input = (body.role or "").lower().strip()
+    # Only accept role if explicitly provided and valid
+    if role_input in valid_roles:
+        role = role_input
+    else:
+        # Default to user only if no valid role provided
+        role = "user"
 
     cid = clean_identifier(ident)
 
@@ -117,11 +130,15 @@ async def register(body: RegisterBody):
     }
     await users_collection.insert_one(doc)
     token = make_token(uid, role)
+    
+    # VERIFY role was stored correctly before returning
+    created_user = await users_collection.find_one({"_id": uid})
+    stored_role = created_user.get("role", "user")
 
     return {
         "access_token": token,
         "token_type":   "bearer",
-        "role":         role,   # ← returned to frontend exactly
+        "role":         stored_role,   # ← returned from DB to ensure consistency
         "name":         name,
         "user_id":      uid,
     }

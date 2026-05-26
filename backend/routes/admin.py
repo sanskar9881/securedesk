@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from database import transactions_collection, users_collection
-from routes.auth import admin_only
+from routes.auth import admin_only, get_current_user
 
 router = APIRouter()
 

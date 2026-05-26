@@ -32,11 +32,30 @@ export default function RegisterPage() {
       setErr("Enter a valid email (you@gmail.com) or phone (9876543210)"); return;
     }
     if (form.password.length < 6) { setErr("Password must be at least 6 characters"); return; }
+    
+    // Validate role before sending
+    const validRoles = ["user", "manager", "admin"];
+    if (!validRoles.includes(role)) {
+      setErr("Invalid role selected. Please start over."); return;
+    }
+    
     setLoad(true);
     try {
-      const { data } = await api.post("/auth/register", {
-        name: form.name.trim(), identifier: id, password: form.password, role,
-      });
+      const payload = {
+        name: form.name.trim(), 
+        identifier: id, 
+        password: form.password, 
+        role: role.toLowerCase(), // Ensure lowercase
+      };
+      
+      const { data } = await api.post("/auth/register", payload);
+      
+      // Validate response contains role
+      if (!data.role) {
+        setErr("Server error: role not returned. Please try again.");
+        return;
+      }
+      
       const actualRole = (data.role || role).toLowerCase();
       login(data.access_token, actualRole, data.name, data.user_id || "");
       toast.success(`Account created! Welcome, ${data.name}`);
