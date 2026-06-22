@@ -14,8 +14,8 @@ export default function UserCountWidget() {
   }, []);
 
   if (!stats) return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-6">
-      <div className="grid grid-cols-4 gap-4">
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         {[1,2,3,4].map(i => <div key={i} className="skeleton h-12" />)}
       </div>
     </div>
@@ -36,20 +36,20 @@ export default function UserCountWidget() {
   };
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-6 animate-fadeInUp">
-      <div className="flex items-center gap-2 mb-4">
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 mb-6 animate-fadeInUp">
+      <div className="flex items-center gap-2 mb-3 md:mb-4">
         <TrendingUp className="w-4 h-4 text-gray-500" />
         <p className="text-gray-500 text-xs uppercase tracking-wider font-semibold">{t("platform_overview")}</p>
       </div>
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         {items.map((item) => (
-          <div key={item.label} className="flex items-center gap-3 group">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-110 ${colorMap[item.color]}`}>
+          <div key={item.label} className="flex items-center gap-2 md:gap-3 group">
+            <div className={`w-8 md:w-9 h-8 md:h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform duration-200 group-hover:scale-110 ${colorMap[item.color]}`}>
               {item.icon}
             </div>
-            <div>
-              <p className="text-xl font-bold text-white">{item.value}</p>
-              <p className="text-gray-500 text-xs">{item.label}</p>
+            <div className="min-w-0">
+              <p className="text-lg md:text-xl font-bold text-white truncate">{item.value}</p>
+              <p className="text-gray-500 text-xs truncate">{item.label}</p>
             </div>
           </div>
         ))}

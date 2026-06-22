@@ -20,35 +20,35 @@ export default function Header({ title, subtitle }: Props) {
   const go = (path: string) => { setOpen(false); navigate(path); };
 
   return (
-    <div className="flex items-start justify-between mb-8" style={{ position:"relative", zIndex:40 }}>
-      <div>
-        <h1 className="text-2xl font-bold text-white tracking-tight">{title}</h1>
-        {subtitle && <p className="text-gray-500 text-sm mt-1">{subtitle}</p>}
+    <div className="flex items-start justify-between mb-6 md:mb-8 flex-wrap gap-3 md:gap-0" style={{ position:"relative", zIndex:40 }}>
+      <div className="min-w-0">
+        <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight">{title}</h1>
+        {subtitle && <p className="text-gray-500 text-xs md:text-sm mt-1">{subtitle}</p>}
       </div>
 
-      <div className="flex items-center gap-2 flex-shrink-0">
+      <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
         {/* Dark mode toggle */}
         <button onClick={toggleDarkMode}
-          className="w-9 h-9 bg-gray-800 hover:bg-gray-700 rounded-xl flex items-center justify-center text-gray-400 hover:text-white transition">
-          {darkMode ? <Sun className="w-4 h-4"/> : <Moon className="w-4 h-4"/>}
+          className="w-8 md:w-9 h-8 md:h-9 bg-gray-800 hover:bg-gray-700 rounded-xl flex items-center justify-center text-gray-400 hover:text-white transition">
+          {darkMode ? <Sun className="w-3.5 md:w-4 h-3.5 md:h-4"/> : <Moon className="w-3.5 md:w-4 h-3.5 md:h-4"/>}
         </button>
 
         {/* Notifications */}
-        <button className="w-9 h-9 bg-gray-800 hover:bg-gray-700 rounded-xl flex items-center justify-center relative text-gray-400 hover:text-white transition">
-          <Bell className="w-4 h-4"/>
+        <button className="w-8 md:w-9 h-8 md:h-9 bg-gray-800 hover:bg-gray-700 rounded-xl flex items-center justify-center relative text-gray-400 hover:text-white transition">
+          <Bell className="w-3.5 md:w-4 h-3.5 md:h-4"/>
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-indigo-500 rounded-full"/>
         </button>
 
         {/* Profile dropdown */}
         <div ref={ref} style={{ position:"relative" }}>
           <button onClick={() => setOpen(!open)}
-            className="flex items-center gap-2.5 bg-gray-800 hover:bg-gray-700 rounded-xl px-3 py-2 transition">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+            className="flex items-center gap-1.5 md:gap-2.5 bg-gray-800 hover:bg-gray-700 rounded-xl px-2 md:px-3 py-1.5 md:py-2 transition">
+            <div className="w-6 md:w-7 h-6 md:h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
               style={{ background:`linear-gradient(135deg,${user?.avatar_color||"#6366f1"},${user?.avatar_color||"#6366f1"}bb)` }}>
               {user?.name?.[0]?.toUpperCase()}
             </div>
-            <span className="text-sm font-medium text-white max-w-[100px] truncate">{user?.name}</span>
-            <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${open?"rotate-180":""}`}/>
+            <span className="text-xs md:text-sm font-medium text-white max-w-[80px] md:max-w-[100px] truncate">{user?.name}</span>
+            <ChevronDown className={`w-3 md:w-3.5 h-3 md:h-3.5 text-gray-400 transition-transform flex-shrink-0 ${open?"rotate-180":""}`}/>
           </button>
 
           {open && (

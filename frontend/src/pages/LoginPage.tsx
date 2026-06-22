@@ -39,7 +39,7 @@ export default function LoginPage() {
       
       // Show message about actual role from server
       if (serverRole !== role) {
-        toast.info(`Account role is ${serverRole}. Logging in as ${serverRole}.`);
+        toast.success(`Account role is ${serverRole}. Logging in as ${serverRole}.`);
       }
       
       login(data.access_token, serverRole, data.name, data.user_id || "");

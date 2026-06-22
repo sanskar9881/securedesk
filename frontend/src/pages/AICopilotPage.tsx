@@ -43,7 +43,7 @@ export default function AICopilotPage() {
   return (
     <div className="flex">
       <Navbar/>
-      <main className="ml-64 flex-1 min-h-screen bg-gray-950 p-8">
+      <main className="ml-0 md:ml-64 flex-1 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300">
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-white">AI Copilot</h1>
           <p className="text-gray-500 text-sm mt-1">Ask anything about your security data in natural language</p>

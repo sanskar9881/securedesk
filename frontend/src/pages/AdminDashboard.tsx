@@ -44,7 +44,7 @@ export default function AdminDashboard() {
   return (
     <div className="flex">
       <Navbar />
-      <main className="ml-64 flex-1 min-h-screen bg-gray-950 p-8">
+      <main className="ml-0 md:ml-64 flex-1 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300">
         <Header title="Dashboard" subtitle="Platform Overview" />
 
         {/* Top stats row */}
@@ -53,7 +53,7 @@ export default function AdminDashboard() {
             <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
               <TrendingUp className="w-3.5 h-3.5"/> Platform Overview
             </p>
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
               {[
                 { label:"Total Users",    val: stats.total_users,       icon:<Users className="w-5 h-5 text-indigo-400"/>,   color:"text-white" },
                 { label:"Admins",         val: stats.admins,            icon:<ShieldCheck className="w-5 h-5 text-amber-400"/>,color:"text-amber-400" },

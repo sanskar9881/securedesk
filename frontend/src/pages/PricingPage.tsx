@@ -95,17 +95,17 @@ export default function PricingPage() {
   return (
     <div className="min-h-screen bg-gray-950 p-8">
       {/* Header */}
-      <div className="text-center mb-12">
-        <div className="inline-flex items-center gap-2 bg-indigo-950/50 border border-indigo-800/40 text-indigo-400 text-xs font-semibold px-4 py-2 rounded-full mb-4">
+      <div className="max-w-3xl mx-auto px-4 md:px-8 text-center mb-8 md:mb-12">
+        <div className="inline-flex items-center gap-2 bg-indigo-950/40 border border-indigo-800/40 text-indigo-400 text-xs md:text-sm font-semibold px-3 md:px-4 py-1.5 md:py-2 rounded-full mb-4 md:mb-6">
           <Crown className="w-3.5 h-3.5" /> Simple, transparent pricing
         </div>
-        <h1 className="text-4xl font-bold text-white mb-3">Choose Your Plan</h1>
-        <p className="text-gray-500 text-lg max-w-xl mx-auto">
+        <h1 className="text-3xl md:text-4xl font-bold text-white mb-2 md:mb-3">Choose Your Plan</h1>
+        <p className="text-gray-500 text-base md:text-lg max-w-xl mx-auto mb-4">
           Protect your company's data. Start free, upgrade when you're ready.
           Cancel anytime.
         </p>
-        <div className="mt-4 bg-amber-950/30 border border-amber-800/40 rounded-xl px-5 py-3 inline-block">
-          <p className="text-amber-400 text-sm">
+        <div className="mt-4 bg-amber-950/30 border border-amber-800/40 rounded-xl px-4 md:px-5 py-2.5 md:py-3 inline-block">
+          <p className="text-amber-400 text-xs md:text-sm">
             ⚖️ DPDP Act 2023 violation penalty: up to <strong>₹250 Crore</strong> —
             SecureDesk costs a fraction of that risk.
           </p>
@@ -113,7 +113,7 @@ export default function PricingPage() {
       </div>
 
       {/* Plans */}
-      <div className="max-w-5xl mx-auto grid grid-cols-3 gap-6 mb-12">
+      <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-12 px-4 md:px-8">
         {planOrder.map(planId => {
           const plan = plans[planId];
           if (!plan) return null;

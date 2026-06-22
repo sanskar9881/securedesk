@@ -1,7 +1,11 @@
 import os
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes import auth, files, admin, profile, phishing, chatbot
+
+# Load environment variables from .env file
+load_dotenv()
 
 def try_import(name, from_path):
     try:
@@ -14,7 +18,7 @@ def try_import(name, from_path):
 
 app = FastAPI(title="SecureDesk API", version="4.0.0")
 
-ORIGINS = ["http://localhost:5173","http://localhost:3000","http://127.0.0.1:5173"]
+ORIGINS = ["http://localhost:5173","http://localhost:5174","http://localhost:3000","http://127.0.0.1:5173","http://127.0.0.1:5174"]
 if os.getenv("FRONTEND_URL"): ORIGINS.append(os.getenv("FRONTEND_URL"))
 
 app.add_middleware(

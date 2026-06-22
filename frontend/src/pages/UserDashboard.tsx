@@ -50,7 +50,7 @@ export default function UserDashboard() {
   return (
     <div className="flex">
       <Navbar />
-      <main className="ml-64 flex-1 min-h-screen bg-gray-950 p-8">
+      <main className="ml-0 md:ml-64 flex-1 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300">
         <Header title="Dashboard" subtitle="Platform Overview" />
 
         {/* Stats */}

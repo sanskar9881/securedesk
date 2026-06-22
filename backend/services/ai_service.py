@@ -1,6 +1,8 @@
 
-import os, json
+import os, json, logging
 import httpx
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_SECURITY = """You are SecureDesk AI — an expert data security classifier.
 Analyze file content for sensitive data, security risks, and compliance violations.
@@ -12,23 +14,35 @@ Be concise, factual, use bullet points. Never make up data."""
 
 
 async def call_anthropic(messages: list, system: str, max_tokens: int = 600) -> str | None:
-    key = os.getenv("ANTHROPIC_API_KEY", "")
+    key = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if not key or key.startswith("your_"):
+        logger.warning("ANTHROPIC_API_KEY not set or is placeholder")
         return None
     try:
-        async with httpx.AsyncClient(timeout=25) as c:
+        async with httpx.AsyncClient(timeout=30) as c:
             r = await c.post(
                 "https://api.anthropic.com/v1/messages",
                 headers={"Content-Type": "application/json",
                          "anthropic-version": "2023-06-01",
                          "x-api-key": key},
-                json={"model": "claude-haiku-4-5-20251001", "max_tokens": max_tokens,
+                json={"model": "claude-3-5-sonnet-20241022", "max_tokens": max_tokens,
                       "system": system, "messages": messages}
             )
         if r.status_code == 200:
-            return r.json()["content"][0]["text"]
-    except Exception:
-        pass
+            data = r.json()
+            if "content" in data and len(data["content"]) > 0:
+                text = data["content"][0].get("text", "")
+                if text:
+                    logger.info("✓ Anthropic API response received")
+                    return text
+        elif r.status_code == 401:
+            logger.error("❌ Anthropic API: Invalid API key (401)")
+        else:
+            logger.error(f"❌ Anthropic API error: {r.status_code}")
+    except httpx.TimeoutException:
+        logger.error("❌ Anthropic API: Request timeout (30s)")
+    except Exception as e:
+        logger.error(f"❌ Anthropic API exception: {str(e)}")
     return None
 
 
@@ -93,12 +107,15 @@ async def copilot_answer(question: str, context: str, user_name: str) -> str:
 LIVE SYSTEM DATA:
 {context}
 
-Answer the question using only the data above. Be specific."""
+Answer the question using only the data above. Be specific. If no relevant data, say so clearly."""
     msgs = [{"role": "user", "content": prompt}]
     ans  = await call_anthropic(msgs, SYSTEM_COPILOT, 700)
     if not ans:
         ans = await call_openai(msgs, SYSTEM_COPILOT, 700)
     if ans:
         return ans
-    lines = [l for l in context.split("\n") if l.strip().startswith("-")][:10]
-    return ("Based on system data:\n" + "\n".join(lines)) if lines else "No matching data found."
+    # Fallback: extract data from context when API isn't available
+    lines = [l.strip() for l in context.split("\n") if l.strip().startswith("-")][:15]
+    if lines:
+        return "Based on current system data:\n" + "\n".join(lines) + "\n\n⚠️ Note: Enhanced AI analysis unavailable. Please check API credentials."
+    return "No matching security data found for this query."

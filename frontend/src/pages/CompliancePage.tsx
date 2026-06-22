@@ -36,7 +36,7 @@ export default function CompliancePage() {
   return (
     <div className="flex">
       <Navbar />
-      <main className="ml-64 flex-1 min-h-screen bg-gray-950 p-8">
+      <main className="ml-0 md:ml-64 flex-1 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300">
         <div className="mb-8 flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">DPDP Compliance</h1>
@@ -95,7 +95,7 @@ export default function CompliancePage() {
             </div>
 
             {/* Stats grid */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
               {[
                 { label:"Files Scanned", val: score.total_files, color:"text-white", icon:"📁" },
                 { label:"High Risk Files", val: score.high_risk, color:"text-red-400", icon:"🔴" },
