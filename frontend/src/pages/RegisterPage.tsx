@@ -155,7 +155,7 @@ export default function RegisterPage() {
               type="button"
               onClick={() => setReveal((v) => !v)}
               aria-label={reveal ? "Hide password" : "Show password"}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded text-slate-400 hover:text-slate-700 transition-colors"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded text-slate-500 hover:text-slate-800 transition-colors"
             >
               {reveal ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
@@ -172,11 +172,11 @@ export default function RegisterPage() {
                       background:
                         strength.score > i
                           ? strength.score === 1
-                            ? "#B5761B"
+                            ? "#8A5A00"
                             : strength.score === 2
-                            ? "#0E7C6B"
-                            : "#2E7D52"
-                          : "#E2E5E1",
+                            ? "#1657C4"
+                            : "#177530"
+                          : "#BFC9D6",
                     }}
                   />
                 ))}

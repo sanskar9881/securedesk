@@ -1,0 +1,220 @@
+import { useState, useId } from "react";
+
+/* ═══════════════════════════════════════════════════════════════════
+   Chart primitives, hand-rolled in SVG.
+
+   Severity is encoded as an escalation scale, never a traffic light:
+     allow  → neutral   (baseline noise, must not draw the eye)
+     warn   → amber
+     block  → crimson   (crimson, not red: beside amber it holds ΔE 15.5
+                         under deuteranopia where red/amber collapses to 7.6)
+
+   Colour never carries identity alone — every series is named in the
+   legend and repeated in the tooltip.
+   ═══════════════════════════════════════════════════════════════════ */
+
+export type Bucket = { label: string; full: string; allow: number; warn: number; block: number };
+
+const SERIES = [
+  { key: "block" as const, label: "High", token: "var(--sev-block)" },
+  { key: "warn" as const, label: "Medium", token: "var(--sev-warn)" },
+  { key: "allow" as const, label: "Low", token: "var(--sev-allow)" },
+];
+
+/* ── Stacked volume over time ──────────────────────────────────── */
+export function EventVolume({ data, height = 168 }: { data: Bucket[]; height?: number }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const gid = useId();
+
+  const max = Math.max(1, ...data.map((d) => d.allow + d.warn + d.block));
+  // A tidy axis top, so gridlines land on round numbers.
+  const step = max <= 4 ? 1 : max <= 10 ? 2 : max <= 40 ? 10 : Math.ceil(max / 4 / 10) * 10;
+  const top = Math.ceil(max / step) * step;
+  const ticks = Array.from({ length: top / step + 1 }, (_, i) => i * step);
+
+  const PAD_L = 30;
+  const PAD_B = 20;
+  const W = 100; // viewBox units, scaled by CSS
+  const plotH = height - PAD_B;
+  const slot = (W - PAD_L) / Math.max(data.length, 1);
+  const barW = Math.min(slot * 0.62, 9);
+
+  const y = (v: number) => plotH - (v / top) * (plotH - 6);
+
+  return (
+    <div className="relative">
+      <svg
+        viewBox={`0 0 ${W} ${height}`}
+        width="100%"
+        height={height}
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={`Events per day by severity over the last ${data.length} days. Peak ${max} in a day.`}
+        style={{ display: "block", overflow: "visible" }}
+      >
+        {/* recessive gridlines */}
+        {ticks.map((t) => (
+          <g key={t}>
+            <line
+              x1={PAD_L} x2={W} y1={y(t)} y2={y(t)}
+              stroke="var(--line-1)" strokeWidth="0.5"
+              vectorEffect="non-scaling-stroke"
+            />
+            <text
+              x={PAD_L - 5} y={y(t) + 3} textAnchor="end"
+              fill="var(--text-4)" fontSize="8"
+              style={{ fontFamily: "ui-monospace, monospace", fontVariantNumeric: "tabular-nums" }}
+            >
+              {t}
+            </text>
+          </g>
+        ))}
+
+        {data.map((d, i) => {
+          const cx = PAD_L + slot * i + slot / 2;
+          const total = d.allow + d.warn + d.block;
+          let cursor = 0;
+          const active = hover === i;
+
+          return (
+            <g key={d.full}>
+              {/* generous hit target, independent of the mark */}
+              <rect
+                x={PAD_L + slot * i} y={0} width={slot} height={plotH}
+                fill={active ? "var(--surface-2)" : "transparent"}
+                onMouseEnter={() => setHover(i)}
+                onMouseLeave={() => setHover(null)}
+                style={{ cursor: "default" }}
+              />
+              {total === 0 ? (
+                /* an explicit zero mark reads better than a gap */
+                <line
+                  x1={cx - barW / 2} x2={cx + barW / 2} y1={plotH} y2={plotH}
+                  stroke="var(--line-2)" strokeWidth="1" vectorEffect="non-scaling-stroke"
+                />
+              ) : (
+                SERIES.map(({ key, token }) => {
+                  const v = d[key];
+                  if (!v) return null;
+                  const h = (v / top) * (plotH - 6);
+                  const yTop = plotH - cursor - h;
+                  cursor += h;
+                  return (
+                    <rect
+                      key={key}
+                      x={cx - barW / 2}
+                      y={yTop}
+                      width={barW}
+                      height={Math.max(h - 0.8, 0.6)}   /* 2px surface gap between segments */
+                      rx="1.2"
+                      fill={token}
+                      opacity={hover === null || active ? 1 : 0.45}
+                      style={{ transition: "opacity .12s" }}
+                    />
+                  );
+                })
+              )}
+            </g>
+          );
+        })}
+
+        {/* baseline */}
+        <line
+          x1={PAD_L} x2={W} y1={plotH} y2={plotH}
+          stroke="var(--line-2)" strokeWidth="1" vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+
+      {/* x labels — thinned so they never collide */}
+      <div className="flex" style={{ paddingLeft: `${(PAD_L / W) * 100}%` }}>
+        {data.map((d, i) => {
+          const every = data.length > 10 ? Math.ceil(data.length / 6) : 1;
+          return (
+            <span
+              key={d.full}
+              className="mono text-[9.5px] text-center"
+              style={{ flex: 1, color: "var(--text-4)" }}
+            >
+              {i % every === 0 ? d.label : " "}
+            </span>
+          );
+        })}
+      </div>
+
+      {/* tooltip */}
+      {hover !== null && (
+        <div
+          className="absolute pointer-events-none rounded-md px-3 py-2 z-20"
+          style={{
+            background: "var(--surface-2)",
+            border: "1px solid var(--line-2)",
+            boxShadow: "var(--shadow-panel)",
+            top: 4,
+            left: `${Math.min(Math.max(((PAD_L + slot * hover + slot / 2) / W) * 100, 8), 78)}%`,
+          }}
+          role="status"
+        >
+          <p className="mono text-[10px] tracking-[0.08em] uppercase mb-1.5" style={{ color: "var(--text-4)" }}>
+            {data[hover].full}
+          </p>
+          {SERIES.map(({ key, label, token }) => (
+            <p key={key} className="flex items-center gap-2 text-[11.5px]" style={{ color: "var(--text-2)" }}>
+              <span className="w-2 h-2 rounded-xs flex-none" style={{ background: token }} />
+              <span className="flex-1">{label}</span>
+              <span className="mono tabular-nums" style={{ color: "var(--text-1)" }}>
+                {data[hover][key]}
+              </span>
+            </p>
+          ))}
+        </div>
+      )}
+      <span id={gid} className="sr-only" />
+    </div>
+  );
+}
+
+/** Legend — always present, so identity is never colour alone. */
+export function SeverityLegend() {
+  return (
+    <div className="flex items-center gap-4">
+      {SERIES.map(({ key, label, token }) => (
+        <span key={key} className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-xs flex-none" style={{ background: token }} />
+          <span className="text-[11.5px]" style={{ color: "var(--text-3)" }}>
+            {label}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/* ── Sparkline for metric tiles ────────────────────────────────── */
+export function Sparkline({
+  values,
+  tone = "var(--accent)",
+  width = 64,
+  height = 18,
+}: {
+  values: number[];
+  tone?: string;
+  width?: number;
+  height?: number;
+}) {
+  if (values.length < 2) return null;
+  const max = Math.max(1, ...values);
+  const dx = width / (values.length - 1);
+  const pts = values.map((v, i) => [i * dx, height - (v / max) * (height - 2) - 1]);
+  const d = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+  const area = `${d} L${width},${height} L0,${height} Z`;
+  const last = pts[pts.length - 1];
+
+  return (
+    <svg width={width} height={height} aria-hidden="true" style={{ display: "block", overflow: "visible" }}>
+      <path d={area} fill={tone} opacity="0.12" />
+      <path d={d} fill="none" stroke={tone} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      {/* emphasised endpoint */}
+      <circle cx={last[0]} cy={last[1]} r="2" fill={tone} />
+    </svg>
+  );
+}

@@ -5,47 +5,52 @@ export default {
     extend: {
       colors: {
         // ── Grounds ──────────────────────────────────────────────
+        // Mirrors the CSS custom properties in src/index.css. Both are
+        // verified by `npm run check:contrast` — change them together.
         ink: {
-          DEFAULT: "#0A0E12",   // console ground — near-black, cold blue bias
-          raised:  "#11161C",   // panels sitting on the ground
-          inset:   "#080B0F",   // wells, inputs, code
-          line:    "#1D242C",   // hairline dividers
-          line2:   "#2A333D",   // emphasized dividers / borders
+          DEFAULT: "#0D1117",   // console ground
+          raised:  "#161B22",   // panels sitting on the ground
+          high:    "#1C2129",   // raised panel
+          inset:   "#010409",   // wells, inputs, code
+          line:    "#363E48",   // hairline dividers — visible, 1.75:1
+          line2:   "#4A5462",   // emphasized dividers
         },
         paper: {
-          DEFAULT: "#FCFCFA",   // marketing ground — off-white, faintly warm
-          raised:  "#FFFFFF",
-          sunk:    "#F2F3F0",
-          line:    "#E2E5E1",
-          line2:   "#CDD2CD",
+          DEFAULT: "#FFFFFF",   // marketing ground — clean white
+          raised:  "#F4F6F9",   // alternating band, faint cool tint
+          sunk:    "#EDF1F5",
+          line:    "#BFC9D6",
+          line2:   "#A9B4C2",
         },
-        // ── Type ─────────────────────────────────────────────────
+        // ── Neutral ramp ─────────────────────────────────────────
+        // 500 and darker are safe on light grounds (>=4.5:1 on white).
+        // 400 and lighter are for DARK grounds only.
         slate: {
-          950: "#0A0E12",
-          900: "#131A21",
-          800: "#1F2933",
-          700: "#33414E",
-          600: "#4C5C6B",
-          500: "#6B7B8A",
-          400: "#8D9BA8",
-          300: "#B4BFC8",
-          200: "#D3DAE0",
-          100: "#E8ECEF",
-          50:  "#F5F7F8",
+          950: "#0D1117",
+          900: "#131A24",
+          800: "#1C2530",
+          700: "#2C3846",
+          600: "#4A5768",   // 7.36:1 on white
+          500: "#5C6979",   // 5.60:1 on white — lightest safe on paper
+          400: "#8B96A3",   // 6.30:1 on ink  — lightest safe on dark
+          300: "#B3BECD",
+          200: "#D3DAE4",
+          100: "#E8ECF2",
+          50:  "#F4F6F9",
         },
-        // ── Brand signal — deep petrol teal ──────────────────────
+        // ── Brand accent — azure ─────────────────────────────────
         signal: {
-          DEFAULT: "#0E7C6B",
-          ink:     "#0A5A4E",   // on light grounds
-          bright:  "#2FD4B8",   // on dark grounds
-          dim:     "#1A9E88",
-          wash:    "#E4F2EF",   // light tint
-          shade:   "#0C1F1C",   // dark tint
+          DEFAULT: "#1657C4",
+          ink:     "#0F469F",   // on light grounds
+          bright:  "#6CB0FF",   // on dark grounds
+          dim:     "#8CC2FF",
+          wash:    "#E8F0FC",
+          shade:   "#0B1A2E",
         },
         // ── Semantic — enforcement outcomes, never the accent ────
-        block: { DEFAULT: "#C0392F", bright: "#F27A6E", wash: "#FBE9E7", shade: "#241110" },
-        warn:  { DEFAULT: "#B5761B", bright: "#E9A53F", wash: "#FBF1DF", shade: "#231A0C" },
-        allow: { DEFAULT: "#2E7D52", bright: "#5FC98A", wash: "#E6F3EB", shade: "#0F1F16" },
+        block: { DEFAULT: "#C0362B", bright: "#FF8078", wash: "#FBEAE8", shade: "#2A100E" },
+        warn:  { DEFAULT: "#8A5A00", bright: "#E3B341", wash: "#F9F0DC", shade: "#241B08" },
+        allow: { DEFAULT: "#177530", bright: "#56D364", wash: "#E6F2E9", shade: "#0C1F12" },
       },
       fontFamily: {
         sans: [

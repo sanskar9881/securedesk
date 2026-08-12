@@ -124,7 +124,7 @@ export default function LoginPage() {
               type="button"
               onClick={() => setReveal((v) => !v)}
               aria-label={reveal ? "Hide password" : "Show password"}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded text-slate-400 hover:text-slate-700 transition-colors"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded text-slate-500 hover:text-slate-800 transition-colors"
             >
               {reveal ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>

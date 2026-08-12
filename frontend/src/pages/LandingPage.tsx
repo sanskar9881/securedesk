@@ -42,21 +42,21 @@ function InterceptPanel() {
 
   return (
     <div
-      className="rounded-lg border border-[#1D242C] bg-[#0A0E12] shadow-[0_28px_70px_-30px_rgba(10,14,18,.55)] overflow-hidden"
+      className="rounded-lg border border-[#363E48] bg-[#0D1117] shadow-[0_28px_70px_-30px_rgba(10,14,18,.55)] overflow-hidden"
       role="img"
       aria-label="Demonstration: a paste of customer records into ChatGPT is classified as CUSTOMER_PII with 0.94 confidence, matched against policy AI-PROTECTION-001, and blocked in 14 milliseconds."
     >
       {/* chrome */}
-      <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-[#1D242C] bg-[#080B0F]">
+      <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-[#363E48] bg-[#010409]">
         <div className="flex items-center gap-2 min-w-0">
-          <Mark size={14} tone="#2FD4B8" />
-          <span className="mono text-[10px] tracking-[0.11em] uppercase text-[#6B7B8A] truncate">
+          <Mark size={14} tone="#6CB0FF" />
+          <span className="mono text-[10px] tracking-[0.11em] uppercase text-[#8B96A3] truncate">
             securedesk · extension
           </span>
         </div>
         <div className="flex items-center gap-1.5 flex-none">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#2FD4B8] animate-pulse-dot" />
-          <span className="mono text-[10px] tracking-[0.09em] uppercase text-[#2FD4B8]">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#6CB0FF] animate-pulse-dot" />
+          <span className="mono text-[10px] tracking-[0.09em] uppercase text-[#6CB0FF]">
             active
           </span>
         </div>
@@ -76,21 +76,21 @@ function InterceptPanel() {
                 opacity: on ? 1 : 0.18,
               }}
             >
-              <span className="mono text-[10.5px] text-[#4C5C6B] pt-px tabular-nums flex-none w-[42px]">
+              <span className="mono text-[10.5px] text-[#8B96A3] pt-px tabular-nums flex-none w-[42px]">
                 {row.t}
               </span>
               <span
                 className="mt-[7px] w-1 h-1 rounded-full flex-none transition-colors duration-300"
-                style={{ background: on ? (last ? "#F27A6E" : "#2FD4B8") : "#33414E" }}
+                style={{ background: on ? (last ? "#FF8078" : "#6CB0FF") : "#8B96A3" }}
               />
               <div className="min-w-0 flex-1">
                 <div
                   className="mono text-[11px] tracking-[0.06em] uppercase transition-colors duration-300"
-                  style={{ color: on ? (last ? "#F27A6E" : "#B4BFC8") : "#4C5C6B" }}
+                  style={{ color: on ? (last ? "#FF8078" : "#C9D1D9") : "#8B96A3" }}
                 >
                   {row.label}
                 </div>
-                <div className="text-[12.5px] text-[#8D9BA8] mt-0.5 truncate">
+                <div className="text-[12.5px] text-[#A8B3BF] mt-0.5 truncate">
                   {row.detail}
                 </div>
               </div>
@@ -100,26 +100,26 @@ function InterceptPanel() {
       </div>
 
       {/* what the employee sees */}
-      <div className="border-t border-[#1D242C] p-3.5">
+      <div className="border-t border-[#363E48] p-3.5">
         <div
           className="rounded-md border p-3.5 transition-all duration-500"
           style={{
-            borderColor: done ? "rgba(242,122,110,.34)" : "#1D242C",
-            background: done ? "rgba(242,122,110,.07)" : "#080B0F",
+            borderColor: done ? "rgba(242,122,110,.34)" : "#363E48",
+            background: done ? "rgba(242,122,110,.07)" : "#010409",
             opacity: done ? 1 : 0.3,
           }}
         >
           <div className="flex items-start gap-2.5">
-            <Mark size={15} tone={done ? "#F27A6E" : "#4C5C6B"} />
+            <Mark size={15} tone={done ? "#FF8078" : "#8B96A3"} />
             <div className="min-w-0">
-              <p className="text-[13px] font-medium text-[#E8ECEF] leading-snug">
+              <p className="text-[13px] font-medium text-[#E6EDF3] leading-snug">
                 SecureDesk blocked this paste
               </p>
-              <p className="text-[12px] text-[#8D9BA8] mt-1 leading-relaxed">
+              <p className="text-[12px] text-[#A8B3BF] mt-1 leading-relaxed">
                 It looks like customer personal information. Your organisation's
                 policy doesn't allow that in external AI tools.
               </p>
-              <p className="mono text-[10px] tracking-[0.08em] uppercase text-[#4C5C6B] mt-2">
+              <p className="mono text-[10px] tracking-[0.08em] uppercase text-[#8B96A3] mt-2">
                 policy AI-PROTECTION-001 · contact security to request an exception
               </p>
             </div>
@@ -232,7 +232,7 @@ export default function LandingPage() {
                 </a>
               </div>
 
-              <p className="mt-5 mono text-[11px] tracking-[0.06em] text-slate-400">
+              <p className="mt-5 mono text-[11px] tracking-[0.06em] text-slate-500">
                 No card required · Deploys to Chrome and Edge in minutes
               </p>
             </div>
@@ -240,7 +240,7 @@ export default function LandingPage() {
             {/* the demo */}
             <div className="lg:pl-2">
               <InterceptPanel />
-              <p className="mt-3 mono text-[10.5px] tracking-[0.07em] uppercase text-slate-400 text-center">
+              <p className="mt-3 mono text-[10.5px] tracking-[0.07em] uppercase text-slate-500 text-center">
                 Illustrative trace — detection and policy run on-device
               </p>
             </div>
@@ -294,7 +294,7 @@ export default function LandingPage() {
                 key={s.n}
                 className="grid sm:grid-cols-[64px_minmax(0,300px)_minmax(0,1fr)] gap-x-6 gap-y-2 py-7 border-b border-paper-line group"
               >
-                <span className="mono text-[12px] text-slate-400 tabular-nums pt-0.5 group-hover:text-signal-ink transition-colors">
+                <span className="mono text-[12px] text-slate-500 tabular-nums pt-0.5 group-hover:text-signal-ink transition-colors">
                   {s.n}
                 </span>
                 <h3 className="text-[15.5px] font-semibold text-slate-900">{s.h}</h3>
@@ -366,7 +366,7 @@ export default function LandingPage() {
               <ul className="divide-y divide-paper-line">
                 {NEVER.map((n) => (
                   <li key={n} className="flex items-start gap-3 px-5 py-3.5">
-                    <Minus className="w-3.5 h-3.5 text-slate-400 mt-1 flex-none" strokeWidth={2.5} />
+                    <Minus className="w-3.5 h-3.5 text-slate-500 mt-1 flex-none" strokeWidth={2.5} />
                     <span className="text-[13.5px] text-slate-700 leading-snug">{n}</span>
                   </li>
                 ))}
@@ -413,7 +413,7 @@ export default function LandingPage() {
                   <h3 className="text-[14px] font-semibold text-slate-900">{p.name}</h3>
                   {p.featured && <span className="tag tag-accent">Most chosen</span>}
                 </div>
-                <p className="mono text-[11px] tracking-[0.07em] uppercase text-slate-400 mb-5">{p.seats}</p>
+                <p className="mono text-[11px] tracking-[0.07em] uppercase text-slate-500 mb-5">{p.seats}</p>
                 <div className="flex items-baseline gap-1 mb-6">
                   <span className="text-[30px] font-semibold tracking-[-0.03em] text-slate-950 tabular-nums">{p.price}</span>
                   <span className="text-[13px] text-slate-500">{p.unit}</span>
@@ -446,7 +446,7 @@ export default function LandingPage() {
       <section className="bg-ink text-slate-100">
         <div className="max-w-shell mx-auto px-6 lg:px-8 py-20 lg:py-28">
           <div className="max-w-narrow">
-            <p className="eyebrow eyebrow-accent mb-5" style={{ color: "#2FD4B8" }}>
+            <p className="eyebrow eyebrow-accent mb-5" style={{ color: "#6CB0FF" }}>
               Early access
             </p>
             <h2 className="text-display-lg text-white">
@@ -458,13 +458,13 @@ export default function LandingPage() {
               Then decide what to enforce.
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-3">
-              <Link to="/register" className="btn !bg-signal-bright !text-[#041410] hover:!bg-[#1A9E88] !px-5 !py-2.5">
+              <Link to="/register" className="btn !bg-signal-bright !text-[#06121F] hover:!bg-[#8CC2FF] !px-5 !py-2.5">
                 Create your workspace
                 <ArrowRight className="w-4 h-4" />
               </Link>
               <a
                 href="mailto:sanskar@securedesk.in"
-                className="btn !border-[#2A333D] !text-slate-200 border hover:!bg-[#11161C] !px-5 !py-2.5"
+                className="btn !border-[#4A5462] !text-slate-200 border hover:!bg-[#161B22] !px-5 !py-2.5"
               >
                 Talk to the team
               </a>
@@ -474,7 +474,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Footer ──────────────────────────────────────────────── */}
-      <footer className="bg-ink border-t border-[#1D242C] text-slate-400">
+      <footer className="bg-ink border-t border-[#363E48] text-slate-400">
         <div className="max-w-shell mx-auto px-6 lg:px-8 py-10">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
             <div className="text-slate-300">
@@ -486,12 +486,12 @@ export default function LandingPage() {
               <a href="mailto:sanskar@securedesk.in" className="hover:text-slate-200 transition-colors">Contact</a>
             </nav>
           </div>
-          <div className="rule !bg-[#1D242C] my-7" />
+          <div className="rule !bg-[#363E48] my-7" />
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <p className="mono text-[11px] tracking-[0.06em] text-slate-500">
+            <p className="mono text-[11px] tracking-[0.06em] text-slate-400">
               © {new Date().getFullYear()} SecureDesk · securedesk.in
             </p>
-            <p className="mono text-[11px] tracking-[0.06em] text-slate-600">
+            <p className="mono text-[11px] tracking-[0.06em] text-slate-400">
               Browser data protection for Chrome and Edge
             </p>
           </div>

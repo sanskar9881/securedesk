@@ -24,7 +24,7 @@ export default function AuthShell({
           className="absolute inset-0 opacity-[0.35] pointer-events-none"
           style={{
             backgroundImage:
-              "linear-gradient(to right, #1D242C 1px, transparent 1px), linear-gradient(to bottom, #1D242C 1px, transparent 1px)",
+              "linear-gradient(to right, #363E48 1px, transparent 1px), linear-gradient(to bottom, #363E48 1px, transparent 1px)",
             backgroundSize: "56px 56px",
             maskImage: "radial-gradient(ellipse 80% 60% at 30% 40%, black, transparent)",
             WebkitMaskImage: "radial-gradient(ellipse 80% 60% at 30% 40%, black, transparent)",
@@ -68,17 +68,17 @@ export function AsideProof({
     <div className="max-w-[440px]">
       <div className="flex items-center gap-2 mb-5">
         <span className="w-1.5 h-1.5 rounded-full bg-signal-bright animate-pulse-dot" />
-        <span className="eyebrow" style={{ color: "#2FD4B8" }}>
+        <span className="eyebrow" style={{ color: "#6CB0FF" }}>
           {eyebrow}
         </span>
       </div>
       <h2 className="text-[27px] leading-[1.18] tracking-[-0.028em] font-semibold text-white">
         {headline}
       </h2>
-      <dl className="mt-9 border-t border-[#1D242C]">
+      <dl className="mt-9 border-t border-[#363E48]">
         {points.map((p) => (
-          <div key={p.k} className="flex items-start gap-5 py-3.5 border-b border-[#1D242C]">
-            <dt className="mono text-[10.5px] tracking-[0.1em] uppercase text-[#4C5C6B] w-[104px] flex-none pt-0.5">
+          <div key={p.k} className="flex items-start gap-5 py-3.5 border-b border-[#363E48]">
+            <dt className="mono text-[10.5px] tracking-[0.1em] uppercase text-[#8B96A3] w-[104px] flex-none pt-0.5">
               {p.k}
             </dt>
             <dd className="text-[13.5px] text-slate-300 leading-snug">{p.v}</dd>
@@ -86,7 +86,7 @@ export function AsideProof({
         ))}
       </dl>
       <div className="mt-8 flex items-start gap-2.5">
-        <Mark size={15} tone="#2FD4B8" className="mt-0.5 flex-none" />
+        <Mark size={15} tone="#6CB0FF" className="mt-0.5 flex-none" />
         <p className="text-[12.5px] leading-relaxed text-slate-400">
           Detection runs on-device. The raw content never reaches our servers —
           only the decision does.

@@ -113,6 +113,48 @@ for (const { name, tokens } of THEMES) {
   }
 }
 
+/* ── Tailwind neutral ramp vs the two marketing grounds ─────────────
+   The marketing/auth pages use literal `text-slate-N` utilities rather than
+   the CSS tokens, so they are not covered above. This asserts the documented
+   contract: 500-and-darker are safe on paper, 400-and-lighter safe on ink.
+   It is what caught text-slate-400 sitting on white at 3.1:1.              */
+const TW = readFileSync(resolve(here, "../tailwind.config.js"), "utf8");
+function twBlock(name) {
+  const re = new RegExp(`${name}:\\s*\\{([\\s\\S]*?)\\n\\s*\\},`, "m");
+  const m = re.exec(TW);
+  if (!m) return null;
+  const out = {};
+  for (const mm of m[1].matchAll(/(\w+)\s*:\s*"(#[0-9A-Fa-f]{6})"/g)) out[mm[1]] = parseColor(mm[2]);
+  return out;
+}
+const slate = twBlock("slate");
+const paperBlk = twBlock("paper");
+const inkBlk = twBlock("paper") && twBlock("ink");
+
+if (slate && paperBlk && inkBlk) {
+  console.log(`\n\x1b[1mtailwind slate ramp — ground safety contract\x1b[0m`);
+  const grounds = [
+    { label: "paper (white)", rgb: paperBlk.DEFAULT, safe: ["500", "600", "700", "800", "900", "950"] },
+    { label: "paper-raised", rgb: paperBlk.raised, safe: ["500", "600", "700", "800", "900", "950"] },
+    { label: "ink (console)", rgb: inkBlk.DEFAULT, safe: ["50", "100", "200", "300", "400"] },
+  ];
+  for (const g of grounds) {
+    if (!g.rgb) continue;
+    const bad = [];
+    for (const step of g.safe) {
+      if (!slate[step]) continue;
+      const r = ratio(slate[step], g.rgb);
+      checks++;
+      if (r < MIN_TEXT) { failures++; bad.push(`slate-${step} ${r.toFixed(2)}`); }
+    }
+    console.log(
+      `  ${g.label.padEnd(16)} declared-safe steps: ${bad.length === 0
+        ? "\x1b[32mall clear\x1b[0m"
+        : `\x1b[31mFAIL — ${bad.join(", ")}\x1b[0m`}`
+    );
+  }
+}
+
 console.log(
   `\n${failures === 0 ? "\x1b[32m✓" : "\x1b[31m✗"} ${checks - failures}/${checks} checks passed\x1b[0m`
 );

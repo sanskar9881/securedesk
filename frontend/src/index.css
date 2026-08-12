@@ -32,12 +32,18 @@
     --accent-wash: rgba(108, 176, 255, 0.13);
     --accent-line: rgba(108, 176, 255, 0.34);
 
-    --sev-block: #FF8078;
-    --sev-warn:  #E3B341;
-    --sev-allow: #56D364;
-    --sev-block-wash: rgba(255, 128, 120, 0.16);
-    --sev-warn-wash:  rgba(227, 179, 65, 0.16);
-    --sev-allow-wash: rgba(86, 211, 100, 0.15);
+    /* Severity is an ESCALATION scale, not a traffic light. LOW is baseline
+       noise and stays neutral so only genuine escalation draws the eye.
+       block is a crimson, not a pure red: beside amber it holds ΔE 15.5 under
+       deuteranopia, where a red/amber pair collapses to 7.6. Verified with
+       the dataviz palette validator. */
+    --sev-block: #F0708F;
+    --sev-warn:  #F0B849;
+    --sev-allow: #8B96A3;
+    --ok:        #56D364;   /* reserved for success confirmation only */
+    --sev-block-wash: rgba(240, 112, 143, 0.17);
+    --sev-warn-wash:  rgba(240, 184, 73, 0.16);
+    --sev-allow-wash: rgba(139, 150, 163, 0.15);
 
     --shadow-panel: 0 1px 0 rgba(255,255,255,.04) inset,
                     0 16px 40px -20px rgba(0,0,0,.85);
@@ -69,12 +75,13 @@
     --accent-wash: rgba(22, 87, 196, 0.09);
     --accent-line: rgba(22, 87, 196, 0.26);
 
-    --sev-block: #C0362B;
-    --sev-warn:  #8A5A00;   /* amber has to go deep to clear 4.5:1 on white */
-    --sev-allow: #177530;
-    --sev-block-wash: rgba(192, 54, 43, 0.09);
-    --sev-warn-wash:  rgba(138, 90, 0, 0.10);
-    --sev-allow-wash: rgba(23, 117, 48, 0.10);
+    --sev-block: #A11043;   /* crimson — separates from amber under CVD */
+    --sev-warn:  #96600A;
+    --sev-allow: #5C6979;   /* neutral baseline */
+    --ok:        #177530;
+    --sev-block-wash: rgba(161, 16, 67, 0.09);
+    --sev-warn-wash:  rgba(150, 96, 10, 0.11);
+    --sev-allow-wash: rgba(92, 105, 121, 0.11);
 
     --shadow-panel: 0 1px 2px rgba(14,22,33,.06),
                     0 12px 32px -16px rgba(14,22,33,.18);
@@ -162,9 +169,17 @@
     display: inline-flex; align-items: center; gap: 5px;
     font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
     font-size: 0.625rem; letter-spacing: 0.09em; text-transform: uppercase;
-    font-weight: 600; padding: 2px 7px; border-radius: 3px;
-    border: 1px solid transparent; white-space: nowrap;
+    font-weight: 650; padding: 2.5px 7px; border-radius: 3px;
+    border: 1px solid transparent; white-space: nowrap; line-height: 1.25;
   }
+  /* The severity dot repeats the state in a second channel, so the pill never
+     depends on hue alone — required, since amber/crimson sit in the 6–8 CVD
+     band for some viewers. */
+  .tag::before {
+    content: ""; width: 4px; height: 4px; border-radius: 50%;
+    background: currentColor; flex: none;
+  }
+  .tag-quiet::before, .tag-accent::before { display: none; }
   .tag-block { color: var(--sev-block); background: var(--sev-block-wash); border-color: color-mix(in srgb, var(--sev-block) 42%, transparent); }
   .tag-warn  { color: var(--sev-warn);  background: var(--sev-warn-wash);  border-color: color-mix(in srgb, var(--sev-warn) 42%, transparent); }
   .tag-allow { color: var(--sev-allow); background: var(--sev-allow-wash); border-color: color-mix(in srgb, var(--sev-allow) 42%, transparent); }

@@ -4,6 +4,7 @@ import Navbar from "../components/Navbar";
 import Header, { Console } from "../components/Header";
 import api from "../api/axios";
 import { ArrowUpRight, Inbox } from "lucide-react";
+import { EventVolume, SeverityLegend, Sparkline, type Bucket } from "../components/charts";
 
 /* ── API shapes (bound to what the backend actually returns) ───── */
 interface Stats {
@@ -44,12 +45,14 @@ function Metric({
   note,
   tone = "neutral",
   loading,
+  spark,
 }: {
   label: string;
   value: React.ReactNode;
   note?: string;
   tone?: "neutral" | "block" | "warn" | "allow";
   loading?: boolean;
+  spark?: number[];
 }) {
   const color =
     tone === "block" ? "var(--sev-block)"
@@ -58,20 +61,25 @@ function Metric({
     : "var(--text-1)";
 
   return (
-    <div className="px-5 py-4" style={{ background: "var(--surface-1)" }}>
-      <p className="eyebrow mb-2.5">{label}</p>
+    <div className="px-5 py-3.5" style={{ background: "var(--surface-1)" }}>
+      <p className="eyebrow mb-2">{label}</p>
       {loading ? (
-        <div className="skeleton h-8 w-20" />
+        <div className="skeleton h-7 w-20" />
       ) : (
-        <p
-          className="text-[27px] leading-none font-semibold tracking-[-0.03em] tabular-nums"
-          style={{ color }}
-        >
-          {value}
-        </p>
+        <div className="flex items-end justify-between gap-3">
+          <p
+            className="text-[26px] leading-none font-semibold tracking-[-0.03em] tabular-nums"
+            style={{ color }}
+          >
+            {value}
+          </p>
+          {spark && spark.some((n) => n > 0) && (
+            <Sparkline values={spark} tone={tone === "neutral" ? "var(--accent)" : color} />
+          )}
+        </div>
       )}
       {note && !loading && (
-        <p className="text-[12px] mt-2" style={{ color: "var(--text-4)" }}>
+        <p className="text-[11.5px] mt-1.5" style={{ color: "var(--text-4)" }}>
           {note}
         </p>
       )}
@@ -168,18 +176,52 @@ export default function AdminDashboard() {
   useEffect(() => {
     Promise.all([
       api.get("/admin/stats").catch(() => ({ data: null })),
-      api.get("/admin/logs", { params: { limit: 12 } }).catch(() => ({ data: { data: [] } })),
+      // Pull a wider window than the table shows so the volume chart has
+      // something real to bucket. The API exposes no time-series endpoint,
+      // so the daily series is derived client-side from actual events.
+      api.get("/admin/logs", { params: { limit: 100 } }).catch(() => ({ data: { data: [] } })),
       api.get("/dlp/alerts").catch(() => ({ data: [] })),
     ])
       .then(([s, l, a]) => {
         if (s.data) setStats(s.data as Stats);
         const payload = (l.data as any)?.data ?? l.data;
-        setRows(Array.isArray(payload) ? payload.slice(0, 10) : []);
+        setRows(Array.isArray(payload) ? payload : []);
         const av = Array.isArray(a.data) ? a.data : (a.data as any)?.alerts ?? [];
         setAlerts(Array.isArray(av) ? av.slice(0, 6) : []);
       })
       .finally(() => setLoading(false));
   }, []);
+
+  /** Bucket real events into the last 14 days by severity. */
+  const buckets: Bucket[] = (() => {
+    const days = 14;
+    const out: Bucket[] = [];
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      out.push({
+        label: String(d.getDate()),
+        full: d.toLocaleDateString(undefined, { day: "numeric", month: "short" }),
+        allow: 0, warn: 0, block: 0,
+      });
+    }
+    const first = new Date(now);
+    first.setDate(first.getDate() - (days - 1));
+    for (const r of rows) {
+      if (!r.timestamp) continue;
+      const t = new Date(r.timestamp);
+      if (Number.isNaN(t.getTime()) || t < first) continue;
+      const idx = Math.floor((t.getTime() - first.getTime()) / 86400000);
+      if (idx < 0 || idx >= days) continue;
+      out[idx][sevOf(r.severity)] += 1;
+    }
+    return out;
+  })();
+
+  const dailyTotals = buckets.map((b) => b.allow + b.warn + b.block);
+  const hasSeries = dailyTotals.some((n) => n > 0);
 
   const total = stats?.total ?? 0;
   const suspicious = stats?.suspicious ?? 0;
@@ -209,6 +251,7 @@ export default function AdminDashboard() {
             value={total.toLocaleString()}
             note={`${stats?.recent_7_days ?? 0} in the last 7 days`}
             loading={loading}
+            spark={dailyTotals}
           />
           <Metric
             label="High risk"
@@ -216,6 +259,7 @@ export default function AdminDashboard() {
             tone={high > 0 ? "block" : "neutral"}
             note={high > 0 ? "Needs review" : "Nothing outstanding"}
             loading={loading}
+            spark={buckets.map((b) => b.block)}
           />
           <Metric
             label="Risk rate"
@@ -226,58 +270,69 @@ export default function AdminDashboard() {
           />
         </div>
 
-        {/* ── Classification split ──────────────────────────── */}
+        {/* ── Event volume — the page's focal point ─────────── */}
         <div className="mb-5">
-          <Panel title="Classification split" meta={`${total.toLocaleString()} events`}>
-            <div className="p-5">
+          <section className="rounded-md overflow-hidden" style={{ border: "1px solid var(--line-1)" }}>
+            <div
+              className="px-4 py-2.5 flex items-center justify-between gap-4 flex-wrap"
+              style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--line-1)" }}
+            >
+              <div className="flex items-baseline gap-3">
+                <h2 className="text-[13px] font-semibold" style={{ color: "var(--text-1)" }}>
+                  Event volume
+                </h2>
+                <span className="mono text-[10px] tracking-[0.09em] uppercase" style={{ color: "var(--text-4)" }}>
+                  Last 14 days
+                </span>
+              </div>
+              <SeverityLegend />
+            </div>
+
+            <div className="px-4 pt-5 pb-3" style={{ background: "var(--surface-1)" }}>
               {loading ? (
-                <div className="skeleton h-2 w-full" />
-              ) : total === 0 ? (
-                <Empty text="No events have been recorded yet." />
+                <div className="skeleton" style={{ height: 168 }} />
+              ) : !hasSeries ? (
+                <div className="flex flex-col items-center justify-center text-center" style={{ height: 168 }}>
+                  <p className="text-[13px] mb-1" style={{ color: "var(--text-2)" }}>
+                    No events in the last 14 days
+                  </p>
+                  <p className="text-[12px]" style={{ color: "var(--text-4)" }}>
+                    {total > 0
+                      ? `${total.toLocaleString()} recorded earlier — the chart covers a rolling two-week window.`
+                      : "Once the extension is deployed, activity appears here."}
+                  </p>
+                </div>
               ) : (
-                <>
-                  <div
-                    className="flex h-2 rounded-full overflow-hidden mb-5"
-                    style={{ background: "var(--surface-in)" }}
-                    role="img"
-                    aria-label={`${legit} legitimate, ${suspicious} suspicious, of ${total} total events`}
-                  >
-                    <div
-                      className="origin-left animate-meter"
-                      style={{ width: `${pct(legit)}%`, background: "var(--sev-allow)" }}
-                    />
-                    <div
-                      className="origin-left animate-meter"
-                      style={{ width: `${pct(suspicious)}%`, background: "var(--sev-block)" }}
-                    />
-                  </div>
-                  <div className="grid sm:grid-cols-3 gap-5">
-                    {[
-                      { k: "Legitimate", v: legit, c: "var(--sev-allow)" },
-                      { k: "Suspicious", v: suspicious, c: "var(--sev-block)" },
-                      { k: "High severity", v: high, c: "var(--sev-warn)" },
-                    ].map((s) => (
-                      <div key={s.k} className="flex items-center gap-2.5">
-                        <span className="w-2 h-2 rounded-xs flex-none" style={{ background: s.c }} />
-                        <span className="text-[13px] flex-1" style={{ color: "var(--text-2)" }}>
-                          {s.k}
-                        </span>
-                        <span
-                          className="mono text-[13px] tabular-nums font-medium"
-                          style={{ color: "var(--text-1)" }}
-                        >
-                          {s.v.toLocaleString()}
-                        </span>
-                        <span className="mono text-[11px] tabular-nums w-12 text-right" style={{ color: "var(--text-4)" }}>
-                          {pct(s.v).toFixed(1)}%
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </>
+                <EventVolume data={buckets} />
               )}
             </div>
-          </Panel>
+
+            {/* Classification split, demoted to a summary strip under the chart */}
+            {!loading && total > 0 && (
+              <div
+                className="px-4 py-2.5 flex items-center gap-6 flex-wrap"
+                style={{ background: "var(--surface-2)", borderTop: "1px solid var(--line-1)" }}
+              >
+                {[
+                  { k: "Legitimate", v: legit },
+                  { k: "Suspicious", v: suspicious },
+                  { k: "High severity", v: high },
+                ].map((s) => (
+                  <span key={s.k} className="flex items-baseline gap-2">
+                    <span className="mono text-[10px] tracking-[0.09em] uppercase" style={{ color: "var(--text-4)" }}>
+                      {s.k}
+                    </span>
+                    <span className="mono text-[13px] tabular-nums font-medium" style={{ color: "var(--text-1)" }}>
+                      {s.v.toLocaleString()}
+                    </span>
+                    <span className="mono text-[11px] tabular-nums" style={{ color: "var(--text-4)" }}>
+                      {pct(s.v).toFixed(0)}%
+                    </span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
 
         {/* ── Event stream + alerts ─────────────────────────── */}
@@ -308,7 +363,7 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((r) => {
+                    {rows.slice(0, 10).map((r) => {
                       const tone = sevOf(r.severity);
                       return (
                         <tr
