@@ -9,34 +9,38 @@
    ═══════════════════════════════════════════════════════════════ */
 
 @layer base {
-  /* ── Console surface tokens (dark by default) ───────────────── */
+  /* ── Console surface tokens (dark by default) ─────────────────────
+     Every value here is chosen to clear `npm run check:contrast`, not
+     picked by eye. Text tokens hold >= 4.5:1 on every surface they can
+     land on; dividers hold >= 1.5:1 so panel edges are actually visible.
+     ─────────────────────────────────────────────────────────────── */
   :root {
-    --surface-0: #0A0E12;   /* app ground        */
-    --surface-1: #11161C;   /* panel             */
-    --surface-2: #161D25;   /* panel, raised     */
-    --surface-in:#080B0F;   /* inset / input     */
-    --line-1:    #1D242C;
-    --line-2:    #2A333D;
+    --surface-0: #0D1117;   /* app ground        */
+    --surface-1: #161B22;   /* panel             */
+    --surface-2: #1C2129;   /* panel, raised     */
+    --surface-in:#010409;   /* inset / input     */
+    --line-1:    #363E48;   /* 1.75:1 on ground — a real edge */
+    --line-2:    #4A5462;
 
-    --text-1:    #E8ECEF;   /* primary           */
-    --text-2:    #B4BFC8;   /* secondary         */
-    --text-3:    #8D9BA8;   /* tertiary          */
-    --text-4:    #6B7B8A;   /* faint / captions  */
+    --text-1:    #E6EDF3;   /* primary   — not pure white, avoids halation */
+    --text-2:    #C9D1D9;   /* secondary */
+    --text-3:    #A8B3BF;   /* tertiary  */
+    --text-4:    #8B96A3;   /* labels / captions — 5.38:1 worst case */
 
-    --accent:      #2FD4B8;
-    --accent-quiet:#1A9E88;
-    --accent-wash: rgba(47, 212, 184, 0.10);
-    --accent-line: rgba(47, 212, 184, 0.28);
+    --accent:      #6CB0FF; /* azure — the enterprise-security register */
+    --accent-quiet:#8CC2FF;
+    --accent-wash: rgba(108, 176, 255, 0.13);
+    --accent-line: rgba(108, 176, 255, 0.34);
 
-    --sev-block: #F27A6E;
-    --sev-warn:  #E9A53F;
-    --sev-allow: #5FC98A;
-    --sev-block-wash: rgba(242, 122, 110, 0.17);
-    --sev-warn-wash:  rgba(233, 165, 63, 0.17);
-    --sev-allow-wash: rgba(95, 201, 138, 0.15);
+    --sev-block: #FF8078;
+    --sev-warn:  #E3B341;
+    --sev-allow: #56D364;
+    --sev-block-wash: rgba(255, 128, 120, 0.16);
+    --sev-warn-wash:  rgba(227, 179, 65, 0.16);
+    --sev-allow-wash: rgba(86, 211, 100, 0.15);
 
-    --shadow-panel: 0 1px 0 rgba(255,255,255,.03) inset,
-                    0 16px 40px -20px rgba(0,0,0,.8);
+    --shadow-panel: 0 1px 0 rgba(255,255,255,.04) inset,
+                    0 16px 40px -20px rgba(0,0,0,.85);
     color-scheme: dark;
   }
 
@@ -48,32 +52,32 @@
      ─────────────────────────────────────────────────────────────── */
   .light-mode,
   .tokens-light {
-    --surface-0: #F2F3F0;
+    --surface-0: #F4F6F9;
     --surface-1: #FFFFFF;
-    --surface-2: #FCFCFA;
-    --surface-in:#F5F7F8;
-    --line-1:    #E2E5E1;
-    --line-2:    #CDD2CD;
+    --surface-2: #FAFBFD;
+    --surface-in:#EDF1F5;
+    --line-1:    #BFC9D6;   /* 1.55:1 on ground, 1.68:1 on white */
+    --line-2:    #A9B4C2;
 
-    --text-1:    #131A21;
-    --text-2:    #33414E;
-    --text-3:    #4C5C6B;
-    --text-4:    #6B7B8A;
+    --text-1:    #0E1621;
+    --text-2:    #2C3846;
+    --text-3:    #4A5768;
+    --text-4:    #5C6979;   /* 5.17:1 worst case — was 3.91 and unreadable */
 
-    --accent:      #0E7C6B;
-    --accent-quiet:#0A5A4E;
-    --accent-wash: rgba(14, 124, 107, 0.08);
-    --accent-line: rgba(14, 124, 107, 0.24);
+    --accent:      #1657C4;
+    --accent-quiet:#0F469F;
+    --accent-wash: rgba(22, 87, 196, 0.09);
+    --accent-line: rgba(22, 87, 196, 0.26);
 
-    --sev-block: #C0392F;
-    --sev-warn:  #B5761B;
-    --sev-allow: #2E7D52;
-    --sev-block-wash: rgba(192, 57, 47, 0.08);
-    --sev-warn-wash:  rgba(181, 118, 27, 0.09);
-    --sev-allow-wash: rgba(46, 125, 82, 0.08);
+    --sev-block: #C0362B;
+    --sev-warn:  #8A5A00;   /* amber has to go deep to clear 4.5:1 on white */
+    --sev-allow: #177530;
+    --sev-block-wash: rgba(192, 54, 43, 0.09);
+    --sev-warn-wash:  rgba(138, 90, 0, 0.10);
+    --sev-allow-wash: rgba(23, 117, 48, 0.10);
 
-    --shadow-panel: 0 1px 2px rgba(10,14,18,.05),
-                    0 12px 32px -16px rgba(10,14,18,.16);
+    --shadow-panel: 0 1px 2px rgba(14,22,33,.06),
+                    0 12px 32px -16px rgba(14,22,33,.18);
     color-scheme: light;
   }
 
