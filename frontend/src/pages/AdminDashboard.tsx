@@ -1,166 +1,406 @@
 import { useEffect, useState } from "react";
-import Navbar from "../components/Navbar";
-import Header from "../components/Header";
 import { Link } from "react-router-dom";
+import Navbar from "../components/Navbar";
+import Header, { Console } from "../components/Header";
 import api from "../api/axios";
-import {
-  Users, ShieldCheck, ShieldAlert, TrendingUp,
-  FileText, Activity, Brain, Clock, AlertTriangle
-} from "lucide-react";
+import { ArrowUpRight, Inbox } from "lucide-react";
 
+/* ── API shapes (bound to what the backend actually returns) ───── */
 interface Stats {
-  total_users: number; admins: number; regular_users: number;
-  total_transactions: number; suspicious: number; legitimate: number; avg_risk: number;
+  total: number;
+  suspicious: number;
+  legitimate: number;
+  high_risk: number;
+  recent_7_days: number;
+  total_users: number;
+  risk_pct: number;
 }
-interface Tx {
-  _id: string; sender_name: string; recipient_email: string; subject: string;
-  classification: string; risk_score: number; severity: string; timestamp: string;
+interface Row {
+  _id: string;
+  sender_name?: string;
+  sender_email?: string;
+  recipient_email?: string;
+  subject?: string;
+  filename?: string;
+  classification?: string;
+  risk_score?: number;
+  severity?: string;
+  timestamp?: string;
 }
-interface Alert { _id: string; message: string; severity: string; timestamp: string; }
+interface Alert {
+  _id: string;
+  message?: string;
+  detail?: string;
+  severity?: string;
+  timestamp?: string;
+  user_name?: string;
+}
+
+/* ── Primitives ───────────────────────────────────────────────── */
+
+function Metric({
+  label,
+  value,
+  note,
+  tone = "neutral",
+  loading,
+}: {
+  label: string;
+  value: React.ReactNode;
+  note?: string;
+  tone?: "neutral" | "block" | "warn" | "allow";
+  loading?: boolean;
+}) {
+  const color =
+    tone === "block" ? "var(--sev-block)"
+    : tone === "warn" ? "var(--sev-warn)"
+    : tone === "allow" ? "var(--sev-allow)"
+    : "var(--text-1)";
+
+  return (
+    <div className="px-5 py-4" style={{ background: "var(--surface-1)" }}>
+      <p className="eyebrow mb-2.5">{label}</p>
+      {loading ? (
+        <div className="skeleton h-8 w-20" />
+      ) : (
+        <p
+          className="text-[27px] leading-none font-semibold tracking-[-0.03em] tabular-nums"
+          style={{ color }}
+        >
+          {value}
+        </p>
+      )}
+      {note && !loading && (
+        <p className="text-[12px] mt-2" style={{ color: "var(--text-4)" }}>
+          {note}
+        </p>
+      )}
+    </div>
+  );
+}
+
+const sevOf = (s?: string): "block" | "warn" | "allow" => {
+  const v = (s || "").toLowerCase();
+  if (v === "high" || v === "critical") return "block";
+  if (v === "medium") return "warn";
+  return "allow";
+};
+
+const sevLabel = (s?: string) => (s || "low").toUpperCase();
+
+function when(ts?: string) {
+  if (!ts) return "—";
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return "—";
+  const mins = Math.floor((Date.now() - d.getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1440) return `${Math.floor(mins / 60)}h ago`;
+  return d.toLocaleDateString(undefined, { day: "2-digit", month: "short" });
+}
+
+function Panel({
+  title,
+  meta,
+  href,
+  hrefLabel,
+  children,
+}: {
+  title: string;
+  meta?: string;
+  href?: string;
+  hrefLabel?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-md overflow-hidden" style={{ border: "1px solid var(--line-1)" }}>
+      <div
+        className="px-4 py-2.5 flex items-center justify-between gap-3"
+        style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--line-1)" }}
+      >
+        <div className="flex items-baseline gap-3 min-w-0">
+          <h2 className="text-[13px] font-semibold" style={{ color: "var(--text-1)" }}>
+            {title}
+          </h2>
+          {meta && (
+            <span className="mono text-[10px] tracking-[0.09em] uppercase" style={{ color: "var(--text-4)" }}>
+              {meta}
+            </span>
+          )}
+        </div>
+        {href && (
+          <Link
+            to={href}
+            className="mono text-[10px] tracking-[0.09em] uppercase flex items-center gap-1 flex-none transition-colors"
+            style={{ color: "var(--text-3)" }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "var(--accent)")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-3)")}
+          >
+            {hrefLabel || "View all"}
+            <ArrowUpRight className="w-3 h-3" />
+          </Link>
+        )}
+      </div>
+      <div style={{ background: "var(--surface-1)" }}>{children}</div>
+    </section>
+  );
+}
+
+function Empty({ text }: { text: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-14 px-6 text-center">
+      <Inbox className="w-5 h-5 mb-3" style={{ color: "var(--text-4)" }} />
+      <p className="text-[13px]" style={{ color: "var(--text-3)" }}>
+        {text}
+      </p>
+    </div>
+  );
+}
+
+/* ── Page ─────────────────────────────────────────────────────── */
 
 export default function AdminDashboard() {
-  const [stats, setStats]   = useState<Stats | null>(null);
-  const [txs, setTxs]       = useState<Tx[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [rows, setRows] = useState<Row[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       api.get("/admin/stats").catch(() => ({ data: null })),
-      api.get("/admin/transactions").catch(() => ({ data: [] })),
+      api.get("/admin/logs", { params: { limit: 12 } }).catch(() => ({ data: { data: [] } })),
       api.get("/dlp/alerts").catch(() => ({ data: [] })),
-    ]).then(([statsRes, txRes, alertRes]) => {
-      if (statsRes.data) setStats(statsRes.data);
-      setTxs((txRes.data as Tx[]).slice(0, 8));
-      setAlerts((alertRes.data as Alert[]).slice(0, 5));
-    }).finally(() => setLoading(false));
+    ])
+      .then(([s, l, a]) => {
+        if (s.data) setStats(s.data as Stats);
+        const payload = (l.data as any)?.data ?? l.data;
+        setRows(Array.isArray(payload) ? payload.slice(0, 10) : []);
+        const av = Array.isArray(a.data) ? a.data : (a.data as any)?.alerts ?? [];
+        setAlerts(Array.isArray(av) ? av.slice(0, 6) : []);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
-  const sev = (s: string) =>
-    s === "high"   ? "text-red-400 bg-red-950/40 border-red-800/40" :
-    s === "medium" ? "text-amber-400 bg-amber-950/40 border-amber-800/40" :
-                     "text-green-400 bg-green-950/40 border-green-800/40";
+  const total = stats?.total ?? 0;
+  const suspicious = stats?.suspicious ?? 0;
+  const legit = stats?.legitimate ?? 0;
+  const high = stats?.high_risk ?? 0;
+  const pct = (n: number) => (total > 0 ? (n / total) * 100 : 0);
 
   return (
-    <div className="flex">
+    <div>
       <Navbar />
-      <main className="ml-0 md:ml-64 flex-1 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300">
-        <Header title="Dashboard" subtitle="Platform Overview" />
+      <Console>
+        <Header title="Overview" subtitle="Organisation security posture" />
 
-        {/* Top stats row */}
-        {stats && (
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 mb-6">
-            <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
-              <TrendingUp className="w-3.5 h-3.5"/> Platform Overview
-            </p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-              {[
-                { label:"Total Users",    val: stats.total_users,       icon:<Users className="w-5 h-5 text-indigo-400"/>,   color:"text-white" },
-                { label:"Admins",         val: stats.admins,            icon:<ShieldCheck className="w-5 h-5 text-amber-400"/>,color:"text-amber-400" },
-                { label:"Regular Users",  val: stats.regular_users,     icon:<Users className="w-5 h-5 text-teal-400"/>,     color:"text-teal-400" },
-                { label:"Transactions",   val: stats.total_transactions, icon:<Activity className="w-5 h-5 text-purple-400"/>,color:"text-white" },
-              ].map(s => (
-                <div key={s.label} className="bg-gray-800/50 rounded-xl p-4 flex items-start gap-3">
-                  <div className="w-10 h-10 bg-gray-800 rounded-xl flex items-center justify-center flex-shrink-0">
-                    {s.icon}
-                  </div>
-                  <div>
-                    <p className="text-gray-500 text-xs">{s.label}</p>
-                    <p className={`text-2xl font-bold mt-0.5 ${s.color}`}>{s.val}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* File stats */}
-        {stats && (
-          <div className="grid grid-cols-4 gap-4 mb-6">
-            {[
-              { label:"Total Sent",  val: stats.total_transactions, color:"bg-indigo-950/30 border-indigo-800/30", num:"text-white" },
-              { label:"Legitimate",  val: stats.legitimate,         color:"bg-green-950/30 border-green-800/30",  num:"text-green-400" },
-              { label:"Suspicious",  val: stats.suspicious,         color:"bg-red-950/30 border-red-800/30",     num:"text-red-400" },
-              { label:"Avg Risk",    val: `${stats.avg_risk ?? 0}%`,color:"bg-amber-950/30 border-amber-800/30", num:"text-amber-400" },
-            ].map(s => (
-              <div key={s.label} className={`border rounded-2xl p-5 ${s.color}`}>
-                <p className="text-gray-500 text-xs">{s.label}</p>
-                <p className={`text-3xl font-bold mt-1 ${s.num}`}>{s.val}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Quick actions */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
-          {[
-            { to:"/admin/users",  icon:<Users className="w-5 h-5"/>,     label:"Manage Users",      color:"from-indigo-600 to-indigo-700" },
-            { to:"/activity",     icon:<Activity className="w-5 h-5"/>,   label:"Activity Logs",    color:"from-teal-600 to-teal-700" },
-            { to:"/ai-copilot",   icon:<Brain className="w-5 h-5"/>,      label:"AI Copilot",       color:"from-purple-600 to-purple-700" },
-            { to:"/compliance",   icon:<ShieldCheck className="w-5 h-5"/>,label:"Compliance Report",color:"from-amber-600 to-amber-700" },
-          ].map(a => (
-            <Link key={a.to} to={a.to}
-              className={`bg-gradient-to-br ${a.color} text-white rounded-2xl p-4 flex items-center gap-3 hover:opacity-90 transition shadow-lg font-medium text-sm`}>
-              {a.icon} {a.label}
-            </Link>
-          ))}
+        {/* ── Summary strip ─────────────────────────────────── */}
+        <div
+          className="grid grid-cols-2 lg:grid-cols-4 gap-px rounded-md overflow-hidden mb-5"
+          style={{ background: "var(--line-1)", border: "1px solid var(--line-1)" }}
+        >
+          <Metric
+            label="Protected people"
+            value={stats?.total_users ?? 0}
+            note="Accounts in this workspace"
+            loading={loading}
+          />
+          <Metric
+            label="Events inspected"
+            value={total.toLocaleString()}
+            note={`${stats?.recent_7_days ?? 0} in the last 7 days`}
+            loading={loading}
+          />
+          <Metric
+            label="High risk"
+            value={high}
+            tone={high > 0 ? "block" : "neutral"}
+            note={high > 0 ? "Needs review" : "Nothing outstanding"}
+            loading={loading}
+          />
+          <Metric
+            label="Risk rate"
+            value={`${stats?.risk_pct ?? 0}%`}
+            tone={(stats?.risk_pct ?? 0) >= 25 ? "warn" : "neutral"}
+            note="Flagged as a share of all events"
+            loading={loading}
+          />
         </div>
 
-        {/* Alerts + transactions */}
-        <div className="grid grid-cols-2 gap-6">
-          {/* Alerts */}
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-800 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-400"/>
-              <h3 className="text-white font-semibold text-sm">Recent Alerts</h3>
+        {/* ── Classification split ──────────────────────────── */}
+        <div className="mb-5">
+          <Panel title="Classification split" meta={`${total.toLocaleString()} events`}>
+            <div className="p-5">
+              {loading ? (
+                <div className="skeleton h-2 w-full" />
+              ) : total === 0 ? (
+                <Empty text="No events have been recorded yet." />
+              ) : (
+                <>
+                  <div
+                    className="flex h-2 rounded-full overflow-hidden mb-5"
+                    style={{ background: "var(--surface-in)" }}
+                    role="img"
+                    aria-label={`${legit} legitimate, ${suspicious} suspicious, of ${total} total events`}
+                  >
+                    <div
+                      className="origin-left animate-meter"
+                      style={{ width: `${pct(legit)}%`, background: "var(--sev-allow)" }}
+                    />
+                    <div
+                      className="origin-left animate-meter"
+                      style={{ width: `${pct(suspicious)}%`, background: "var(--sev-block)" }}
+                    />
+                  </div>
+                  <div className="grid sm:grid-cols-3 gap-5">
+                    {[
+                      { k: "Legitimate", v: legit, c: "var(--sev-allow)" },
+                      { k: "Suspicious", v: suspicious, c: "var(--sev-block)" },
+                      { k: "High severity", v: high, c: "var(--sev-warn)" },
+                    ].map((s) => (
+                      <div key={s.k} className="flex items-center gap-2.5">
+                        <span className="w-2 h-2 rounded-xs flex-none" style={{ background: s.c }} />
+                        <span className="text-[13px] flex-1" style={{ color: "var(--text-2)" }}>
+                          {s.k}
+                        </span>
+                        <span
+                          className="mono text-[13px] tabular-nums font-medium"
+                          style={{ color: "var(--text-1)" }}
+                        >
+                          {s.v.toLocaleString()}
+                        </span>
+                        <span className="mono text-[11px] tabular-nums w-12 text-right" style={{ color: "var(--text-4)" }}>
+                          {pct(s.v).toFixed(1)}%
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
-            {alerts.length === 0 ? (
-              <div className="flex flex-col items-center py-10 text-gray-600">
-                <ShieldCheck className="w-8 h-8 mb-2 text-green-700"/>
-                <p className="text-sm">No active alerts</p>
-              </div>
-            ) : alerts.map(a => (
-              <div key={a._id} className="px-5 py-3 border-b border-gray-800/50 flex items-start gap-3">
-                <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5"/>
-                <div>
-                  <p className="text-gray-200 text-xs">{a.message}</p>
-                  <p className="text-gray-600 text-xs mt-0.5">
-                    {new Date(a.timestamp).toLocaleString()}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
+          </Panel>
+        </div>
 
-          {/* Recent transactions */}
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-800 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-indigo-400"/>
-              <h3 className="text-white font-semibold text-sm">Recent Transactions</h3>
-            </div>
+        {/* ── Event stream + alerts ─────────────────────────── */}
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)] gap-5 items-start">
+          <Panel title="Recent events" meta="Newest first" href="/activity" hrefLabel="Event stream">
             {loading ? (
-              <div className="flex items-center justify-center py-10">
-                <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"/>
+              <div className="p-4 space-y-2.5">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="skeleton h-9 w-full" />
+                ))}
               </div>
-            ) : txs.length === 0 ? (
-              <div className="flex flex-col items-center py-10 text-gray-600">
-                <FileText className="w-8 h-8 mb-2"/>
-                <p className="text-sm">No transactions yet</p>
+            ) : rows.length === 0 ? (
+              <Empty text="No events yet. They'll appear here as soon as activity is inspected." />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left" style={{ borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--line-1)" }}>
+                      {["Severity", "Actor", "Destination", "Detail", "Risk", "When"].map((h) => (
+                        <th
+                          key={h}
+                          className="eyebrow px-4 py-2 font-medium whitespace-nowrap"
+                          style={{ fontSize: "0.5625rem" }}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => {
+                      const tone = sevOf(r.severity);
+                      return (
+                        <tr
+                          key={r._id}
+                          className={`stripe stripe-${tone} transition-colors`}
+                          style={{ borderBottom: "1px solid var(--line-1)" }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-2)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                        >
+                          <td className="px-4 py-2.5 whitespace-nowrap">
+                            <span className={`tag tag-${tone}`}>{sevLabel(r.severity)}</span>
+                          </td>
+                          <td className="px-4 py-2.5 text-[13px] max-w-[150px] truncate" style={{ color: "var(--text-1)" }}>
+                            {r.sender_name || r.sender_email || "—"}
+                          </td>
+                          <td className="px-4 py-2.5 text-[13px] max-w-[170px] truncate" style={{ color: "var(--text-2)" }}>
+                            {r.recipient_email || "—"}
+                          </td>
+                          <td className="px-4 py-2.5 text-[13px] max-w-[200px] truncate" style={{ color: "var(--text-3)" }}>
+                            {r.filename || r.subject || r.classification || "—"}
+                          </td>
+                          <td className="px-4 py-2.5 whitespace-nowrap">
+                            <span
+                              className="mono text-[12px] tabular-nums"
+                              style={{
+                                color:
+                                  (r.risk_score ?? 0) >= 70
+                                    ? "var(--sev-block)"
+                                    : (r.risk_score ?? 0) >= 35
+                                    ? "var(--sev-warn)"
+                                    : "var(--text-3)",
+                              }}
+                            >
+                              {r.risk_score != null ? `${r.risk_score}` : "—"}
+                            </span>
+                          </td>
+                          <td
+                            className="px-4 py-2.5 mono text-[11.5px] whitespace-nowrap"
+                            style={{ color: "var(--text-4)" }}
+                          >
+                            {when(r.timestamp)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-            ) : txs.map(tx => (
-              <div key={tx._id} className="px-5 py-3 border-b border-gray-800/50 flex items-center justify-between">
-                <div className="min-w-0">
-                  <p className="text-gray-300 text-xs font-medium truncate">{tx.subject || "No subject"}</p>
-                  <p className="text-gray-500 text-xs truncate">{tx.sender_name} → {tx.recipient_email}</p>
-                </div>
-                <span className={`text-xs px-2 py-0.5 rounded-full border font-medium flex-shrink-0 ml-3 capitalize ${sev(tx.severity)}`}>
-                  {tx.severity}
-                </span>
+            )}
+          </Panel>
+
+          <Panel title="Open alerts" meta={alerts.length ? `${alerts.length}` : undefined}>
+            {loading ? (
+              <div className="p-4 space-y-2.5">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="skeleton h-12 w-full" />
+                ))}
               </div>
-            ))}
-          </div>
+            ) : alerts.length === 0 ? (
+              <Empty text="No open alerts." />
+            ) : (
+              <ul>
+                {alerts.map((a) => {
+                  const tone = sevOf(a.severity);
+                  return (
+                    <li
+                      key={a._id}
+                      className={`stripe stripe-${tone} px-4 py-3`}
+                      style={{ borderBottom: "1px solid var(--line-1)" }}
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <span className={`tag tag-${tone}`}>{sevLabel(a.severity)}</span>
+                        <span className="mono text-[10.5px] flex-none" style={{ color: "var(--text-4)" }}>
+                          {when(a.timestamp)}
+                        </span>
+                      </div>
+                      <p className="text-[12.5px] leading-snug" style={{ color: "var(--text-2)" }}>
+                        {a.detail || a.message || "Anomaly detected"}
+                      </p>
+                      {a.user_name && (
+                        <p className="mono text-[10px] tracking-[0.08em] uppercase mt-1" style={{ color: "var(--text-4)" }}>
+                          {a.user_name}
+                        </p>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Panel>
         </div>
-      </main>
+      </Console>
     </div>
   );
 }

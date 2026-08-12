@@ -1,189 +1,261 @@
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import api from "../api/axios";
+import Mark from "./Mark";
 import {
-  Shield, LayoutDashboard, Send, LogOut, Users, History,
-  ShieldAlert, MessageSquare, Moon, Sun, ScanLine, Brain,
-  Activity, Database, FileCheck, TrendingUp, Building2,
-  MessageCircle, CreditCard, Bell, Menu, X,
+  LayoutDashboard, Send, LogOut, Users, History, ShieldAlert,
+  MessageSquare, ScanLine, Brain, Activity, Database, FileCheck,
+  TrendingUp, Building2, MessageCircle, CreditCard, Menu, X, Settings,
 } from "lucide-react";
 
-export default function Navbar() {
-  const { user, logout, darkMode, toggleDarkMode, t } = useAuth();
-  const navigate  = useNavigate();
-  const loc       = useLocation();
-  const active    = (p: string) => loc.pathname === p;
-  const [notifCount, setNotifCount] = useState(0);
-  const [mobileOpen, setMobileOpen] = useState(false);
+type Item = { to: string; icon: React.ReactNode; label: string };
+type Group = { title: string; items: Item[] };
 
-  // Poll notifications every 30 seconds
+const ic = "w-[15px] h-[15px]";
+
+export default function Navbar() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const loc = useLocation();
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => setOpen(false), [loc.pathname]);
+
   useEffect(() => {
-    const fetchCount = () => {
-      api.get("/notifications/count")
-        .then(({ data }) => setNotifCount(data.count || 0))
-        .catch(() => {});
-    };
-    fetchCount();
-    const interval = setInterval(fetchCount, 30000);
-    return () => clearInterval(interval);
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
   }, []);
 
-  // Close mobile menu on route change
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [loc.pathname]);
-
-  const L = ({ to, icon, label, badge }: { to:string; icon:React.ReactNode; label:string; badge?:string }) => (
-    <Link to={to} onClick={() => setMobileOpen(false)} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs md:text-sm font-medium transition-all group relative
-      ${active(to)
-        ? darkMode ? "bg-indigo-600/20 text-indigo-300 border border-indigo-600/30" : "bg-indigo-50 text-indigo-700 border border-indigo-200"
-        : darkMode ? "text-gray-400 hover:bg-white/5 hover:text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"}`}>
-      {active(to) && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-indigo-500 rounded-r-full"/>}
-      <span className={`transition-transform group-hover:scale-110 flex-shrink-0 ${active(to) ? (darkMode?"text-indigo-400":"text-indigo-600") : ""}`}>{icon}</span>
-      <span className="flex-1">{label}</span>
-      {badge && <span className="text-xs bg-indigo-600 text-white px-1.5 py-0.5 rounded-full font-bold">{badge}</span>}
-    </Link>
-  );
-
-  const S = ({ title }: { title: string }) => (
-    <p className={`text-xs uppercase tracking-wider font-semibold px-3 mt-4 mb-1 ${darkMode?"text-gray-600":"text-slate-400"}`}>{title}</p>
-  );
-
-  const isAdmin   = user?.role === "admin";
+  const isAdmin = user?.role === "admin";
   const isManager = user?.role === "manager";
+  const isStaff = isAdmin || isManager;
+
+  const groups: Group[] = isStaff
+    ? [
+        {
+          title: "Monitor",
+          items: [
+            { to: "/admin", icon: <LayoutDashboard className={ic} />, label: "Overview" },
+            { to: "/activity", icon: <Activity className={ic} />, label: "Event stream" },
+            { to: "/ueba", icon: <TrendingUp className={ic} />, label: "Behaviour" },
+          ],
+        },
+        {
+          title: "Inspect",
+          items: [
+            { to: "/dlp", icon: <ScanLine className={ic} />, label: "Content scanner" },
+            { to: "/fingerprints", icon: <Database className={ic} />, label: "Fingerprints" },
+            { to: "/whatsapp-logs", icon: <MessageCircle className={ic} />, label: "Messaging" },
+            { to: "/phishing", icon: <ShieldAlert className={ic} />, label: "Phishing checks" },
+          ],
+        },
+        {
+          title: "Govern",
+          items: [
+            ...(isAdmin ? [{ to: "/admin/users", icon: <Users className={ic} />, label: "People" }] : []),
+            { to: "/organization", icon: <Building2 className={ic} />, label: "Organisation" },
+            { to: "/compliance", icon: <FileCheck className={ic} />, label: "Compliance" },
+          ],
+        },
+        {
+          title: "Assist",
+          items: [
+            { to: "/ai-copilot", icon: <Brain className={ic} />, label: "Copilot" },
+            { to: "/chat", icon: <MessageSquare className={ic} />, label: "Assistant" },
+          ],
+        },
+      ]
+    : [
+        {
+          title: "Workspace",
+          items: [
+            { to: "/dashboard", icon: <LayoutDashboard className={ic} />, label: "Overview" },
+            { to: "/share", icon: <Send className={ic} />, label: "Send a file" },
+            { to: "/history", icon: <History className={ic} />, label: "My history" },
+          ],
+        },
+        {
+          title: "Tools",
+          items: [
+            { to: "/dlp", icon: <ScanLine className={ic} />, label: "Content scanner" },
+            { to: "/phishing", icon: <ShieldAlert className={ic} />, label: "Phishing check" },
+            { to: "/activity", icon: <Activity className={ic} />, label: "My activity" },
+          ],
+        },
+        {
+          title: "Assist",
+          items: [
+            { to: "/ai-copilot", icon: <Brain className={ic} />, label: "Copilot" },
+            { to: "/chat", icon: <MessageSquare className={ic} />, label: "Assistant" },
+          ],
+        },
+      ];
+
+  const roleLabel =
+    user?.role === "admin" ? "Administrator" : user?.role === "manager" ? "Manager" : "Employee";
 
   return (
     <>
-      {/* Mobile overlay */}
-      {mobileOpen && (
+      {/* mobile trigger */}
+      <button
+        onClick={() => setOpen(true)}
+        aria-label="Open navigation"
+        className="md:hidden fixed top-3 left-3 z-[60] w-9 h-9 rounded flex items-center justify-center"
+        style={{ background: "var(--surface-1)", border: "1px solid var(--line-2)", color: "var(--text-2)" }}
+      >
+        <Menu className="w-4 h-4" />
+      </button>
+
+      {open && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
-          onClick={() => setMobileOpen(false)}
+          className="md:hidden fixed inset-0 z-[65] bg-black/60 backdrop-blur-[2px]"
+          onClick={() => setOpen(false)}
         />
       )}
 
-      <div className={`fixed left-0 top-0 h-screen w-64 flex flex-col z-50 shadow-xl transition-all duration-300 transform
-        ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
-        ${darkMode ? "bg-gray-950 border-r border-gray-800/60" : "bg-white border-r border-slate-200"}`}>
+      <div
+        className={`fixed left-0 top-0 h-screen w-64 z-[70] flex flex-col transition-transform duration-200 ease-swift
+          ${open ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
+        style={{ background: "var(--surface-1)", borderRight: "1px solid var(--line-1)" }}
+      >
+        {/* brand */}
+        <div
+          className="h-14 px-4 flex items-center justify-between flex-none"
+          style={{ borderBottom: "1px solid var(--line-1)" }}
+        >
+          <Link to={isStaff ? "/admin" : "/dashboard"} className="flex items-center gap-2.5 min-w-0">
+            <Mark size={19} tone="var(--accent)" />
+            <span
+              className="font-semibold text-[14.5px] tracking-[-0.02em] truncate"
+              style={{ color: "var(--text-1)" }}
+            >
+              SecureDesk
+            </span>
+          </Link>
+          <button
+            onClick={() => setOpen(false)}
+            aria-label="Close navigation"
+            className="md:hidden p-1 rounded"
+            style={{ color: "var(--text-3)" }}
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
 
-        {/* Brand */}
-        <div className={`p-4 md:p-5 border-b ${darkMode?"border-gray-800/60":"border-slate-200"}`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <div className="w-9 md:w-10 h-9 md:h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
-                <Shield className="w-5 h-5 text-white"/>
-              </div>
-              <div className="min-w-0">
-                <h1 className={`font-bold text-sm md:text-base tracking-tight truncate ${darkMode?"text-white":"text-slate-900"}`}>SecureDesk</h1>
-                <p className={`text-xs ${darkMode?"text-gray-500":"text-slate-400"}`}>DLP v4.0</p>
+        {/* nav */}
+        <nav className="flex-1 overflow-y-auto no-scrollbar py-4 px-2.5">
+          {groups.map((g) => (
+            <div key={g.title} className="mb-5">
+              <p className="eyebrow px-2.5 mb-1.5" style={{ fontSize: "0.5625rem" }}>
+                {g.title}
+              </p>
+              <div className="space-y-px">
+                {g.items.map((it) => {
+                  const active = loc.pathname === it.to;
+                  return (
+                    <Link
+                      key={it.to}
+                      to={it.to}
+                      aria-current={active ? "page" : undefined}
+                      className="relative flex items-center gap-2.5 px-2.5 py-[7px] rounded-sm text-[13.5px] transition-colors duration-150"
+                      style={{
+                        background: active ? "var(--accent-wash)" : "transparent",
+                        color: active ? "var(--accent)" : "var(--text-3)",
+                        fontWeight: active ? 550 : 450,
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!active) {
+                          e.currentTarget.style.background = "var(--surface-2)";
+                          e.currentTarget.style.color = "var(--text-1)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!active) {
+                          e.currentTarget.style.background = "transparent";
+                          e.currentTarget.style.color = "var(--text-3)";
+                        }
+                      }}
+                    >
+                      {active && (
+                        <span
+                          className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-[15px] rounded-r"
+                          style={{ background: "var(--accent)" }}
+                        />
+                      )}
+                      <span className="flex-none opacity-90">{it.icon}</span>
+                      <span className="truncate">{it.label}</span>
+                    </Link>
+                  );
+                })}
               </div>
             </div>
-            {/* Close button on mobile */}
-            <button
-              onClick={() => setMobileOpen(false)}
-              className="md:hidden p-1"
+          ))}
+        </nav>
+
+        {/* account */}
+        <div className="flex-none p-2.5" style={{ borderTop: "1px solid var(--line-1)" }}>
+          <Link
+            to="/profile"
+            className="flex items-center gap-2.5 px-2 py-2 rounded-sm transition-colors duration-150"
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-2)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+          >
+            <span
+              className="w-7 h-7 rounded flex items-center justify-center text-[11.5px] font-semibold flex-none"
+              style={{ background: "var(--accent-wash)", color: "var(--accent)", border: "1px solid var(--accent-line)" }}
             >
-              <X className={`w-5 h-5 ${darkMode ? "text-gray-400" : "text-slate-500"}`} />
+              {user?.name?.[0]?.toUpperCase() ?? "?"}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] truncate" style={{ color: "var(--text-1)" }}>
+                {user?.name}
+              </span>
+              <span className="block mono text-[9.5px] tracking-[0.11em] uppercase" style={{ color: "var(--text-4)" }}>
+                {roleLabel}
+              </span>
+            </span>
+          </Link>
+
+          <div className="flex gap-px mt-1">
+            <Link
+              to="/settings"
+              className="flex-1 flex items-center justify-center gap-1.5 py-[7px] rounded-sm text-[12px] transition-colors"
+              style={{ color: "var(--text-3)" }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "var(--surface-2)";
+                e.currentTarget.style.color = "var(--text-1)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.color = "var(--text-3)";
+              }}
+            >
+              <Settings className="w-3.5 h-3.5" />
+              Settings
+            </Link>
+            <button
+              onClick={() => {
+                logout();
+                navigate("/login");
+              }}
+              className="flex-1 flex items-center justify-center gap-1.5 py-[7px] rounded-sm text-[12px] transition-colors"
+              style={{ color: "var(--text-3)" }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "var(--sev-block-wash)";
+                e.currentTarget.style.color = "var(--sev-block)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.color = "var(--text-3)";
+              }}
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              Sign out
             </button>
           </div>
         </div>
-
-        {/* User card */}
-        <Link to="/profile" onClick={() => setMobileOpen(false)} className={`p-3 md:p-4 border-b transition-colors group ${darkMode?"border-gray-800/60 hover:bg-white/[0.02]":"border-slate-200 hover:bg-slate-50"}`}>
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0 shadow-md"
-              style={{background:`linear-gradient(135deg,${user?.avatar_color||"#6366f1"},${user?.avatar_color||"#6366f1"}cc)`}}>
-              {user?.name?.[0]?.toUpperCase()}
-            </div>
-            <div className="min-w-0">
-              <p className={`text-xs md:text-sm font-medium truncate ${darkMode?"text-white":"text-slate-800"}`}>{user?.name}</p>
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium inline-block ${
-                user?.role==="admin"   ? (darkMode?"bg-amber-500/15 text-amber-400 border border-amber-500/20":"bg-amber-100 text-amber-700") :
-                user?.role==="manager" ? (darkMode?"bg-purple-500/15 text-purple-400 border border-purple-500/20":"bg-purple-100 text-purple-700") :
-                                         (darkMode?"bg-teal-500/15 text-teal-400 border border-teal-500/20":"bg-teal-100 text-teal-700")}`}>
-                {user?.role}
-              </span>
-            </div>
-          </div>
-        </Link>
-
-        {/* Navigation */}
-        <nav className="flex-1 p-2 md:p-3 overflow-y-auto space-y-0.5">
-
-        {/* ADMIN */}
-        {isAdmin && (<>
-          <S title="Overview"/>
-          <L to="/admin"         icon={<LayoutDashboard className="w-4 h-4"/>} label={t("dashboard")}/>
-          <L to="/admin/users"   icon={<Users className="w-4 h-4"/>}           label={t("users")}/>
-          <L to="/organization"  icon={<Building2 className="w-4 h-4"/>}       label="Organization"/>
-          <S title="DLP Engine"/>
-          <L to="/dlp"           icon={<ScanLine className="w-4 h-4"/>}        label="DLP Scanner"   badge="AI"/>
-          <L to="/activity"      icon={<Activity className="w-4 h-4"/>}        label="Activity Logs"/>
-          <L to="/fingerprints"  icon={<Database className="w-4 h-4"/>}        label="Fingerprints"/>
-          <L to="/whatsapp-logs" icon={<MessageCircle className="w-4 h-4"/>}   label="WhatsApp DLP"  badge="NEW"/>
-          <L to="/ueba"          icon={<TrendingUp className="w-4 h-4"/>}      label="Behavior UEBA" badge="AI"/>
-          <S title="Intelligence"/>
-          <L to="/ai-copilot"    icon={<Brain className="w-4 h-4"/>}           label="AI Copilot"/>
-          <L to="/compliance"    icon={<FileCheck className="w-4 h-4"/>}       label="Compliance"    badge="DPDP"/>
-          <S title="Security"/>
-          <L to="/phishing"      icon={<ShieldAlert className="w-4 h-4"/>}     label={t("phishing")}/>
-          <L to="/chat"          icon={<MessageSquare className="w-4 h-4"/>}   label="AI Chat"/>
-          <S title="Account"/>
-          <L to="/pricing"       icon={<CreditCard className="w-4 h-4"/>}      label="Billing & Plans"/>
-        </>)}
-
-        {/* MANAGER */}
-        {isManager && (<>
-          <S title="Overview"/>
-          <L to="/admin"         icon={<LayoutDashboard className="w-4 h-4"/>} label="Dashboard"/>
-          <L to="/organization"  icon={<Building2 className="w-4 h-4"/>}       label="Organization"/>
-          <S title="DLP Engine"/>
-          <L to="/dlp"           icon={<ScanLine className="w-4 h-4"/>}        label="DLP Scanner"   badge="AI"/>
-          <L to="/activity"      icon={<Activity className="w-4 h-4"/>}        label="Activity Logs"/>
-          <L to="/whatsapp-logs" icon={<MessageCircle className="w-4 h-4"/>}   label="WhatsApp DLP"  badge="NEW"/>
-          <L to="/ueba"          icon={<TrendingUp className="w-4 h-4"/>}      label="Behavior UEBA"/>
-          <S title="Intelligence"/>
-          <L to="/ai-copilot"    icon={<Brain className="w-4 h-4"/>}           label="AI Copilot"/>
-          <L to="/compliance"    icon={<FileCheck className="w-4 h-4"/>}       label="Compliance"/>
-          <S title="Security"/>
-          <L to="/phishing"      icon={<ShieldAlert className="w-4 h-4"/>}     label={t("phishing")}/>
-          <L to="/chat"          icon={<MessageSquare className="w-4 h-4"/>}   label="AI Chat"/>
-          <L to="/pricing"       icon={<CreditCard className="w-4 h-4"/>}      label="Billing & Plans"/>
-        </>)}
-
-        {/* EMPLOYEE */}
-        {!isAdmin && !isManager && (<>
-          <S title="Overview"/>
-          <L to="/dashboard"    icon={<LayoutDashboard className="w-4 h-4"/>} label={t("dashboard")}/>
-          <L to="/share"        icon={<Send className="w-4 h-4"/>}             label={t("send_file")}/>
-          <L to="/history"      icon={<History className="w-4 h-4"/>}          label={t("history")}/>
-          <S title="DLP Tools"/>
-          <L to="/dlp"          icon={<ScanLine className="w-4 h-4"/>}         label="DLP Scanner"  badge="AI"/>
-          <L to="/activity"     icon={<Activity className="w-4 h-4"/>}         label="My Activity"/>
-          <L to="/ai-copilot"   icon={<Brain className="w-4 h-4"/>}            label="AI Copilot"/>
-          <S title="Security"/>
-          <L to="/phishing"     icon={<ShieldAlert className="w-4 h-4"/>}      label={t("phishing")}/>
-          <L to="/chat"         icon={<MessageSquare className="w-4 h-4"/>}    label={t("ai_assistant")}/>
-          <L to="/pricing"      icon={<CreditCard className="w-4 h-4"/>}       label="Upgrade Plan"/>
-        </>)}
-      </nav>
-
-      {/* Bottom */}
-      <div className={`p-3 border-t space-y-0.5 ${darkMode?"border-gray-800/60":"border-slate-200"}`}>
-        <button onClick={toggleDarkMode}
-          className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm transition group ${darkMode?"text-gray-400 hover:bg-white/5 hover:text-white":"text-slate-500 hover:bg-slate-100 hover:text-slate-900"}`}>
-          <span className="transition-transform group-hover:rotate-12">{darkMode?<Sun className="w-4 h-4"/>:<Moon className="w-4 h-4"/>}</span>
-          <span className="flex-1 text-left">{darkMode?"Light Mode":"Dark Mode"}</span>
-          <span className={`text-xs px-1.5 py-0.5 rounded-md font-semibold ${darkMode?"bg-gray-800 text-gray-500":"bg-indigo-100 text-indigo-600"}`}>{darkMode?"OFF":"ON"}</span>
-        </button>
-        <button onClick={()=>{logout();navigate("/login");}}
-          className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm transition group ${darkMode?"text-gray-400 hover:bg-red-500/10 hover:text-red-400":"text-slate-500 hover:bg-red-50 hover:text-red-600"}`}>
-          <LogOut className="w-4 h-4"/>
-          {t("sign_out")}
-        </button>
       </div>
-    </div>
     </>
   );
 }

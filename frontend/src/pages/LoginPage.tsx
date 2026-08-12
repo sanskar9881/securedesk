@@ -1,179 +1,166 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { Eye, EyeOff, Loader2, AlertCircle, ArrowRight } from "lucide-react";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
-import toast from "react-hot-toast";
-import { Shield, Eye, EyeOff, Mail, Lock, Loader2, ChevronDown } from "lucide-react";
-
-type Role = "user" | "manager" | "admin";
+import AuthShell, { AsideProof } from "../components/AuthShell";
 
 export default function LoginPage() {
-  const { login }  = useAuth();
-  const navigate   = useNavigate();
-  const [id, setId]    = useState("");
-  const [pw, setPw]    = useState("");
-  const [role, setRole] = useState<Role>("user");
-  const [showRoleMenu, setShowRoleMenu] = useState(false);
-  const [show, setShow]= useState(false);
-  const [load, setLoad]= useState(false);
-  const [err, setErr]  = useState("");
+  const { login } = useAuth();
+  const navigate = useNavigate();
 
-  const roles: { role: Role; label: string; icon: string }[] = [
-    { role: "user", label: "Employee", icon: "👤" },
-    { role: "manager", label: "Manager", icon: "👔" },
-    { role: "admin", label: "Admin", icon: "🏢" },
-  ];
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
+  const [reveal, setReveal] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
-  const doLogin = async () => {
-    setErr("");
-    if (!id.trim()) { setErr("Enter your email or phone number"); return; }
-    if (!pw)        { setErr("Enter your password"); return; }
-    setLoad(true);
+  const submit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    setError("");
+
+    if (!identifier.trim()) return setError("Enter your work email or phone number.");
+    if (!password) return setError("Enter your password.");
+
+    setBusy(true);
     try {
       const { data } = await api.post("/auth/login", {
-        identifier: id.trim(), password: pw,
+        identifier: identifier.trim(),
+        password,
       });
 
-      // Store role exactly as returned from backend
-      const serverRole = (data.role || "user").toLowerCase() as Role;
-      
-      // Show message about actual role from server
-      if (serverRole !== role) {
-        toast.success(`Account role is ${serverRole}. Logging in as ${serverRole}.`);
-      }
-      
-      login(data.access_token, serverRole, data.name, data.user_id || "");
-      toast.success(`Welcome back, ${data.name}!`);
-
-      // Redirect based on role
-      if (serverRole === "admin" || serverRole === "manager") {
-        navigate("/admin");
-      } else {
-        navigate("/dashboard");
-      }
-    } catch (e: any) {
-      setErr(e.response?.data?.detail || "Login failed. Check your credentials.");
-    } finally { setLoad(false); }
+      // The server is the only authority on role — we never ask the user.
+      const role = (data.role || "user").toLowerCase();
+      login(data.access_token, role, data.name, data.user_id || "");
+      navigate(role === "admin" || role === "manager" ? "/admin" : "/dashboard");
+    } catch (err: any) {
+      setError(
+        err.response?.data?.detail ||
+          "We couldn't sign you in. Check your email and password, then try again."
+      );
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+    <AuthShell
+      aside={
+        <AsideProof
+          eyebrow="Security console"
+          headline="Every decision your policies made, with the reason attached."
+          points={[
+            { k: "Events", v: "Paste, upload, and form submissions across Chrome and Edge" },
+            { k: "Decisions", v: "Allow, warn, or block — traced back to the rule that fired" },
+            { k: "Incidents", v: "Triage, resolve, and mark false positives with a full audit trail" },
+          ]}
+        />
+      }
+    >
+      <div className="mb-8">
+        <h1 className="text-[26px] leading-tight tracking-[-0.028em] font-semibold text-slate-950">
+          Sign in
+        </h1>
+        <p className="mt-2 text-[14px] text-slate-500">
+          Access your organisation's security console.
+        </p>
+      </div>
 
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-2xl shadow-indigo-500/30 mb-4">
-            <Shield className="w-8 h-8 text-white"/>
-          </div>
-          <h1 className="text-2xl font-bold text-white">Sign In to SecureDesk</h1>
-          <p className="text-gray-500 text-sm mt-1">AI-Powered Data Loss Prevention</p>
+      {error && (
+        <div
+          role="alert"
+          className="mb-5 flex items-start gap-2.5 rounded border border-block/30 bg-block-wash px-3.5 py-3"
+        >
+          <AlertCircle className="w-4 h-4 text-block mt-px flex-none" />
+          <p className="text-[13px] leading-snug text-block">{error}</p>
+        </div>
+      )}
+
+      <form onSubmit={submit} className="space-y-4">
+        <div>
+          <label htmlFor="identifier" className="field-label">
+            Work email or phone
+          </label>
+          <input
+            id="identifier"
+            value={identifier}
+            onChange={(e) => {
+              setIdentifier(e.target.value);
+              setError("");
+            }}
+            placeholder="you@company.com"
+            autoFocus
+            autoComplete="username"
+            className="field !bg-paper-raised !border-paper-line2 !text-slate-900"
+          />
         </div>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 shadow-2xl">
-
-          {err && (
-            <div className="bg-red-950/40 border border-red-800/50 rounded-xl px-4 py-3 mb-5 flex items-start gap-2">
-              <span className="flex-shrink-0 mt-0.5">⚠️</span>
-              <p className="text-red-400 text-sm">{err}</p>
-            </div>
-          )}
-
-          <div className="space-y-4">
-            {/* Role Selection */}
-            <div className="relative">
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                Login As (Optional — role will be verified at login)
-              </label>
-              <button
-                type="button"
-                onClick={() => setShowRoleMenu(!showRoleMenu)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white text-sm flex items-center justify-between hover:border-indigo-600 transition"
-              >
-                <span className="flex items-center gap-2">
-                  <span>{roles.find(r => r.role === role)?.icon}</span>
-                  <span>{roles.find(r => r.role === role)?.label}</span>
-                </span>
-                <ChevronDown className={`w-4 h-4 transition ${showRoleMenu ? "rotate-180" : ""}`} />
-              </button>
-              {showRoleMenu && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-gray-800 border border-gray-700 rounded-xl z-10 overflow-hidden">
-                  {roles.map(r => (
-                    <button
-                      key={r.role}
-                      onClick={() => {
-                        setRole(r.role);
-                        setShowRoleMenu(false);
-                      }}
-                      className={`w-full text-left px-4 py-2.5 text-sm hover:bg-indigo-600/20 transition flex items-center gap-2 ${
-                        role === r.role ? "bg-indigo-600/30 text-indigo-400" : "text-gray-300"
-                      }`}
-                    >
-                      <span>{r.icon}</span>
-                      <span>{r.label}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              <p className="text-gray-600 text-xs mt-1">Your actual role will be verified from your account</p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                Email or Phone Number
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600"/>
-                <input value={id}
-                  onChange={e => { setId(e.target.value); setErr(""); }}
-                  onKeyDown={e => e.key === "Enter" && doLogin()}
-                  placeholder="you@company.com  or  9876543210"
-                  autoFocus autoComplete="username"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-10 pr-4 py-3 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition"/>
-              </div>
-            </div>
-
-            <div>
-              <div className="flex justify-between mb-1.5">
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Password</label>
-                <Link to="/forgot-password" className="text-xs text-indigo-400 hover:text-indigo-300 transition">
-                  Forgot password?
-                </Link>
-              </div>
-              <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600"/>
-                <input type={show ? "text" : "password"} value={pw}
-                  onChange={e => { setPw(e.target.value); setErr(""); }}
-                  onKeyDown={e => e.key === "Enter" && doLogin()}
-                  placeholder="Your password" autoComplete="current-password"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-10 pr-12 py-3 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition"/>
-                <button type="button" onClick={() => setShow(!show)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400">
-                  {show ? <EyeOff className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
-                </button>
-              </div>
-            </div>
-
-            <button onClick={doLogin} disabled={load}
-              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 text-white py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition shadow-lg shadow-indigo-500/20">
-              {load ? <Loader2 className="w-4 h-4 animate-spin"/> : <Shield className="w-4 h-4"/>}
-              {load ? "Signing in..." : "Sign In"}
+        <div>
+          <div className="flex items-baseline justify-between mb-1.5">
+            <label htmlFor="password" className="field-label !mb-0">
+              Password
+            </label>
+            <Link
+              to="/forgot-password"
+              className="text-[12px] text-signal-ink hover:underline underline-offset-2"
+            >
+              Forgot?
+            </Link>
+          </div>
+          <div className="relative">
+            <input
+              id="password"
+              type={reveal ? "text" : "password"}
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setError("");
+              }}
+              placeholder="••••••••"
+              autoComplete="current-password"
+              className="field !bg-paper-raised !border-paper-line2 !text-slate-900 !pr-11"
+            />
+            <button
+              type="button"
+              onClick={() => setReveal((v) => !v)}
+              aria-label={reveal ? "Hide password" : "Show password"}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded text-slate-400 hover:text-slate-700 transition-colors"
+            >
+              {reveal ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
-
-          <div className="mt-5 bg-indigo-950/30 border border-indigo-800/30 rounded-xl p-3">
-            <p className="text-xs text-gray-500">
-              <span className="text-indigo-400 font-medium">New here?</span>{" "}
-              <Link to="/register" className="text-indigo-400 underline">Create an account</Link>
-              {" "}and choose your role (Admin / Manager / Employee).
-            </p>
-          </div>
         </div>
 
-        <p className="text-center text-gray-600 text-sm mt-6">
-          No account?{" "}
-          <Link to="/register" className="text-indigo-400 hover:text-indigo-300 font-medium">Register here</Link>
-        </p>
-        <p className="text-center text-gray-700 text-xs mt-3">Built with love from Sanskar Hadole ❤️</p>
-      </div>
-    </div>
+        <button
+          type="submit"
+          disabled={busy}
+          className="btn w-full !bg-slate-900 !text-paper hover:!bg-slate-800 !py-2.5 mt-1"
+        >
+          {busy ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Signing in
+            </>
+          ) : (
+            <>
+              Sign in
+              <ArrowRight className="w-4 h-4" />
+            </>
+          )}
+        </button>
+      </form>
+
+      <div className="rule !bg-paper-line my-7" />
+
+      <p className="text-[13.5px] text-slate-500">
+        Don't have a workspace yet?{" "}
+        <Link
+          to="/register"
+          className="text-slate-900 font-medium hover:text-signal-ink transition-colors"
+        >
+          Create one
+        </Link>
+      </p>
+    </AuthShell>
   );
 }

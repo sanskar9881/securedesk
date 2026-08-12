@@ -1,148 +1,235 @@
 import { useEffect, useState } from "react";
-import Navbar from "../components/Navbar";
-import Header from "../components/Header";
 import { Link } from "react-router-dom";
+import Navbar from "../components/Navbar";
+import Header, { Console } from "../components/Header";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
-import { Send, FileText, ShieldCheck, ShieldAlert, TrendingUp, Clock } from "lucide-react";
+import { Send, ScanLine, ShieldAlert, ArrowUpRight, Inbox } from "lucide-react";
 
-interface Stats {
-  total: number; legitimate: number; suspicious: number; avg_risk: number;
-}
 interface Tx {
-  _id: string; recipient_email: string; subject: string; filename: string;
-  classification: string; risk_score: number; severity: string; timestamp: string;
+  _id: string;
+  recipient_email?: string;
+  subject?: string;
+  filename?: string;
+  classification?: string;
+  risk_score?: number;
+  severity?: string;
+  timestamp?: string;
+}
+
+const sevOf = (s?: string): "block" | "warn" | "allow" => {
+  const v = (s || "").toLowerCase();
+  if (v === "high" || v === "critical") return "block";
+  if (v === "medium") return "warn";
+  return "allow";
+};
+
+function when(ts?: string) {
+  if (!ts) return "—";
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return "—";
+  const mins = Math.floor((Date.now() - d.getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1440) return `${Math.floor(mins / 60)}h ago`;
+  return d.toLocaleDateString(undefined, { day: "2-digit", month: "short" });
 }
 
 export default function UserDashboard() {
-  const { user, t } = useAuth();
-  const [stats, setStats] = useState<Stats>({ total:0, legitimate:0, suspicious:0, avg_risk:0 });
-  const [txs, setTxs]     = useState<Tx[]>([]);
+  const { user } = useAuth();
+  const [txs, setTxs] = useState<Tx[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      api.get("/files/my-history").catch(() => ({ data: [] })),
-      api.get("/admin/stats").catch(() => ({ data: null })),
-    ]).then(([histRes, statsRes]) => {
-      const hist = histRes.data as Tx[];
-      setTxs(hist.slice(0, 8));
-      const total      = hist.length;
-      const legit      = hist.filter(h => h.classification === "legitimate").length;
-      const suspicious = hist.filter(h => h.classification === "suspicious").length;
-      const avg        = total > 0
-        ? Math.round(hist.reduce((s,h) => s + (h.risk_score||0), 0) / total)
-        : 0;
-      setStats({ total, legitimate: legit, suspicious, avg_risk: avg });
-
-      // If admin stats available, merge total users
-      if (statsRes.data) {
-        // keep local file stats
-      }
-    }).finally(() => setLoading(false));
+    api
+      .get("/files/my-history")
+      .catch(() => ({ data: [] }))
+      .then(({ data }) => setTxs(Array.isArray(data) ? data : []))
+      .finally(() => setLoading(false));
   }, []);
 
-  const severityColor = (s: string) =>
-    s === "high"   ? "text-red-400 bg-red-950/40 border-red-800/40" :
-    s === "medium" ? "text-amber-400 bg-amber-950/40 border-amber-800/40" :
-                     "text-green-400 bg-green-950/40 border-green-800/40";
+  const total = txs.length;
+  const flagged = txs.filter((t) => t.classification === "suspicious").length;
+  const highest = txs.reduce((m, t) => Math.max(m, t.risk_score ?? 0), 0);
+  const recent = txs.slice(0, 8);
+
+  const firstName = user?.name?.split(" ")[0] ?? "there";
+
+  const actions = [
+    { to: "/share", icon: <Send className="w-4 h-4" />, title: "Send a file", desc: "Scanned before it leaves" },
+    { to: "/dlp", icon: <ScanLine className="w-4 h-4" />, title: "Scan content", desc: "Check text or a document" },
+    { to: "/phishing", icon: <ShieldAlert className="w-4 h-4" />, title: "Check a message", desc: "Verify a suspicious email" },
+  ];
 
   return (
-    <div className="flex">
+    <div>
       <Navbar />
-      <main className="ml-0 md:ml-64 flex-1 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300">
-        <Header title="Dashboard" subtitle="Platform Overview" />
+      <Console>
+        <Header title={`Good to see you, ${firstName}`} subtitle="Your workspace" />
 
-        {/* Stats */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 mb-6">
-          <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-4 flex items-center gap-2">
-            <TrendingUp className="w-3.5 h-3.5" /> Platform Overview
-          </p>
-          <div className="grid grid-cols-4 gap-4">
-            {[
-              { label:"Total Sent",   val: stats.total,       icon:<FileText className="w-5 h-5 text-indigo-400"/>,  color:"text-white" },
-              { label:"Legitimate",   val: stats.legitimate,  icon:<ShieldCheck className="w-5 h-5 text-green-400"/>, color:"text-green-400" },
-              { label:"Suspicious",   val: stats.suspicious,  icon:<ShieldAlert className="w-5 h-5 text-red-400"/>,   color:"text-red-400" },
-              { label:"Avg Risk",     val: `${stats.avg_risk}%`, icon:<TrendingUp className="w-5 h-5 text-amber-400"/>, color:"text-amber-400" },
-            ].map(s => (
-              <div key={s.label} className="bg-gray-800/50 rounded-xl p-4 flex items-start gap-3">
-                <div className="w-10 h-10 bg-gray-800 rounded-xl flex items-center justify-center flex-shrink-0">
-                  {s.icon}
-                </div>
-                <div>
-                  <p className="text-gray-500 text-xs">{s.label}</p>
-                  <p className={`text-2xl font-bold mt-0.5 ${s.color}`}>{s.val}</p>
-                </div>
+        {/* ── Quick actions ─────────────────────────────────── */}
+        <div className="grid sm:grid-cols-3 gap-3 mb-5">
+          {actions.map((a) => (
+            <Link
+              key={a.to}
+              to={a.to}
+              className="group rounded-md px-4 py-3.5 flex items-start gap-3 transition-colors"
+              style={{ background: "var(--surface-1)", border: "1px solid var(--line-1)" }}
+              onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--accent-line)")}
+              onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--line-1)")}
+            >
+              <span
+                className="w-8 h-8 rounded-sm flex items-center justify-center flex-none"
+                style={{ background: "var(--accent-wash)", color: "var(--accent)" }}
+              >
+                {a.icon}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5">
+                  <span className="text-[13.5px] font-medium" style={{ color: "var(--text-1)" }}>
+                    {a.title}
+                  </span>
+                  <ArrowUpRight
+                    className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{ color: "var(--accent)" }}
+                  />
+                </span>
+                <span className="block text-[12px] mt-0.5" style={{ color: "var(--text-4)" }}>
+                  {a.desc}
+                </span>
+              </span>
+            </Link>
+          ))}
+        </div>
+
+        {/* ── Personal metrics ──────────────────────────────── */}
+        <div
+          className="grid grid-cols-3 gap-px rounded-md overflow-hidden mb-5"
+          style={{ background: "var(--line-1)", border: "1px solid var(--line-1)" }}
+        >
+          {[
+            { label: "Files sent", value: total, tone: "var(--text-1)" },
+            { label: "Flagged", value: flagged, tone: flagged ? "var(--sev-block)" : "var(--text-1)" },
+            { label: "Highest risk", value: total ? `${highest}` : "—", tone: highest >= 70 ? "var(--sev-block)" : highest >= 35 ? "var(--sev-warn)" : "var(--text-1)" },
+          ].map((m) => (
+            <div key={m.label} className="px-5 py-4" style={{ background: "var(--surface-1)" }}>
+              <p className="eyebrow mb-2.5">{m.label}</p>
+              {loading ? (
+                <div className="skeleton h-8 w-16" />
+              ) : (
+                <p
+                  className="text-[27px] leading-none font-semibold tracking-[-0.03em] tabular-nums"
+                  style={{ color: m.tone }}
+                >
+                  {m.value}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* ── History ───────────────────────────────────────── */}
+        <section className="rounded-md overflow-hidden" style={{ border: "1px solid var(--line-1)" }}>
+          <div
+            className="px-4 py-2.5 flex items-center justify-between"
+            style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--line-1)" }}
+          >
+            <h2 className="text-[13px] font-semibold" style={{ color: "var(--text-1)" }}>
+              Recent activity
+            </h2>
+            <Link
+              to="/history"
+              className="mono text-[10px] tracking-[0.09em] uppercase flex items-center gap-1 transition-colors"
+              style={{ color: "var(--text-3)" }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--accent)")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-3)")}
+            >
+              Full history
+              <ArrowUpRight className="w-3 h-3" />
+            </Link>
+          </div>
+
+          <div style={{ background: "var(--surface-1)" }}>
+            {loading ? (
+              <div className="p-4 space-y-2.5">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="skeleton h-9 w-full" />
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Send file CTA */}
-        <Link to="/share"
-          className="flex items-center gap-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white px-6 py-4 rounded-2xl font-semibold mb-6 transition shadow-lg shadow-indigo-500/20 w-fit">
-          <Send className="w-5 h-5" /> Send File
-        </Link>
-
-        {/* Recent transactions */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-800">
-            <h3 className="text-white font-semibold flex items-center gap-2">
-              <Clock className="w-4 h-4 text-indigo-400" /> Recent Transactions
-            </h3>
-          </div>
-          {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"/>
-            </div>
-          ) : txs.length === 0 ? (
-            <div className="flex flex-col items-center py-16 text-gray-600">
-              <FileText className="w-12 h-12 mb-3"/>
-              <p className="text-sm font-medium">No transactions yet</p>
-              <Link to="/share" className="mt-3 text-indigo-400 hover:text-indigo-300 text-sm transition">
-                Send your first file →
-              </Link>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-gray-500 text-xs uppercase tracking-wider border-b border-gray-800">
-                    {["Recipient","Subject","File","Status","Risk","Date"].map(h => (
-                      <th key={h} className="text-left px-6 py-3 font-semibold">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {txs.map(tx => (
-                    <tr key={tx._id} className="border-b border-gray-800/50 hover:bg-gray-800/20 transition">
-                      <td className="px-6 py-3 text-gray-300 truncate max-w-[140px]">{tx.recipient_email}</td>
-                      <td className="px-6 py-3 text-gray-400 truncate max-w-[140px]">{tx.subject}</td>
-                      <td className="px-6 py-3 text-gray-500 truncate max-w-[120px]">{tx.filename || "—"}</td>
-                      <td className="px-6 py-3">
-                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium border capitalize
-                          ${tx.classification === "legitimate"
-                            ? "text-green-400 bg-green-950/40 border-green-800/40"
-                            : "text-red-400 bg-red-950/40 border-red-800/40"}`}>
-                          {tx.classification}
-                        </span>
-                      </td>
-                      <td className="px-6 py-3">
-                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium border capitalize ${severityColor(tx.severity)}`}>
-                          {tx.severity}
-                        </span>
-                      </td>
-                      <td className="px-6 py-3 text-gray-500 text-xs">
-                        {new Date(tx.timestamp).toLocaleDateString("en-IN", { day:"numeric", month:"short" })}
-                      </td>
+            ) : recent.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+                <Inbox className="w-5 h-5 mb-3" style={{ color: "var(--text-4)" }} />
+                <p className="text-[13px] mb-3" style={{ color: "var(--text-3)" }}>
+                  Nothing here yet.
+                </p>
+                <Link to="/share" className="btn btn-secondary !py-1.5 !px-3 !text-[12.5px]">
+                  Send your first file
+                </Link>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left" style={{ borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--line-1)" }}>
+                      {["Severity", "Recipient", "Item", "Risk", "When"].map((h) => (
+                        <th
+                          key={h}
+                          className="eyebrow px-4 py-2 font-medium whitespace-nowrap"
+                          style={{ fontSize: "0.5625rem" }}
+                        >
+                          {h}
+                        </th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </main>
+                  </thead>
+                  <tbody>
+                    {recent.map((t) => {
+                      const tone = sevOf(t.severity);
+                      return (
+                        <tr
+                          key={t._id}
+                          className={`stripe stripe-${tone} transition-colors`}
+                          style={{ borderBottom: "1px solid var(--line-1)" }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-2)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                        >
+                          <td className="px-4 py-2.5 whitespace-nowrap">
+                            <span className={`tag tag-${tone}`}>{(t.severity || "low").toUpperCase()}</span>
+                          </td>
+                          <td className="px-4 py-2.5 text-[13px] max-w-[180px] truncate" style={{ color: "var(--text-1)" }}>
+                            {t.recipient_email || "—"}
+                          </td>
+                          <td className="px-4 py-2.5 text-[13px] max-w-[220px] truncate" style={{ color: "var(--text-3)" }}>
+                            {t.filename || t.subject || "—"}
+                          </td>
+                          <td className="px-4 py-2.5 whitespace-nowrap">
+                            <span
+                              className="mono text-[12px] tabular-nums"
+                              style={{
+                                color:
+                                  (t.risk_score ?? 0) >= 70
+                                    ? "var(--sev-block)"
+                                    : (t.risk_score ?? 0) >= 35
+                                    ? "var(--sev-warn)"
+                                    : "var(--text-3)",
+                              }}
+                            >
+                              {t.risk_score != null ? t.risk_score : "—"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 mono text-[11.5px] whitespace-nowrap" style={{ color: "var(--text-4)" }}>
+                            {when(t.timestamp)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </section>
+      </Console>
     </div>
   );
 }

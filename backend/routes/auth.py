@@ -56,7 +56,10 @@ class RegisterBody(BaseModel):
     name:       str
     identifier: str
     password:   str
-    role:       str  # REQUIRED - no default! User must explicitly select a role
+    # `role` is accepted for backward compatibility with older clients but is
+    # NEVER trusted. Privileges are granted by an administrator, never claimed
+    # by the account being created. See assign below.
+    role:       str | None = None
 
 
 class LoginBody(BaseModel):
@@ -69,10 +72,6 @@ async def register(body: RegisterBody):
     name  = body.name.strip()
     ident = body.identifier.strip()
     pw    = body.password
-    raw_role = body.role  # Keep original for logging
-
-    # Debug logging
-    print(f"[REGISTER] Raw role received: '{raw_role}' (type: {type(raw_role).__name__})")
 
     # ── Validation ──────────────────────────────────────────────
     if not name or len(name) < 2:
@@ -90,21 +89,13 @@ async def register(body: RegisterBody):
             "Enter a valid email (you@gmail.com) or phone number (9876543210)"
         )
 
-    # ── Role — TRUST WHAT THE USER SENDS ────────────────────────
-    # No override. If user selects Admin, they get Admin.
-    valid_roles = {"user", "manager", "admin"}
-    # Normalize the role: lowercase and strip whitespace
-    role_input = raw_role.lower().strip() if raw_role else ""
-    print(f"[REGISTER] Processed role_input: '{role_input}' | valid: {role_input in valid_roles}")
-    
-    # Only accept role if explicitly provided and valid
-    if role_input in valid_roles:
-        role = role_input
-        print(f"[REGISTER] ACCEPTED role: '{role}'")
-    else:
-        # Default to user only if no valid role provided
-        role = "user"
-        print(f"[REGISTER] DEFAULTED to role: '{role}' (input was '{role_input}')")
+    # ── Role — NEVER trusted from the request ───────────────────
+    # Self-registration always produces an unprivileged account. Elevating a
+    # user to manager/admin is an administrative action performed against an
+    # existing account; it is not something a signup payload can ask for.
+    # (Previously this endpoint stored whatever role the client sent, which
+    # allowed anyone reaching the API to create an admin account.)
+    role = "user"
 
     cid = clean_identifier(ident)
 
@@ -139,17 +130,11 @@ async def register(body: RegisterBody):
     }
     await users_collection.insert_one(doc)
     token = make_token(uid, role)
-    
-    # VERIFY role was stored correctly before returning
-    created_user = await users_collection.find_one({"_id": uid})
-    stored_role = created_user.get("role", "user")
-    
-    print(f"[REGISTER] User created: id={uid}, name={name}, requested_role={raw_role}, stored_role={stored_role}")
 
     return {
         "access_token": token,
         "token_type":   "bearer",
-        "role":         stored_role,   # ← returned from DB to ensure consistency
+        "role":         role,
         "name":         name,
         "user_id":      uid,
     }

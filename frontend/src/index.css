@@ -2,174 +2,280 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+/* ═══════════════════════════════════════════════════════════════
+   SecureDesk — foundation
+   No external font requests: a security product should not leak
+   viewer IPs to a font CDN on every page load. System stack only.
+   ═══════════════════════════════════════════════════════════════ */
 
-/* ── Base ─────────────────────────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+@layer base {
+  /* ── Console surface tokens (dark by default) ───────────────── */
+  :root {
+    --surface-0: #0A0E12;   /* app ground        */
+    --surface-1: #11161C;   /* panel             */
+    --surface-2: #161D25;   /* panel, raised     */
+    --surface-in:#080B0F;   /* inset / input     */
+    --line-1:    #1D242C;
+    --line-2:    #2A333D;
 
-body {
-  margin: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  -webkit-font-smoothing: antialiased;
-  transition: background-color 0.3s ease, color 0.3s ease;
+    --text-1:    #E8ECEF;   /* primary           */
+    --text-2:    #B4BFC8;   /* secondary         */
+    --text-3:    #8D9BA8;   /* tertiary          */
+    --text-4:    #6B7B8A;   /* faint / captions  */
+
+    --accent:      #2FD4B8;
+    --accent-quiet:#1A9E88;
+    --accent-wash: rgba(47, 212, 184, 0.10);
+    --accent-line: rgba(47, 212, 184, 0.28);
+
+    --sev-block: #F27A6E;
+    --sev-warn:  #E9A53F;
+    --sev-allow: #5FC98A;
+    --sev-block-wash: rgba(242, 122, 110, 0.17);
+    --sev-warn-wash:  rgba(233, 165, 63, 0.17);
+    --sev-allow-wash: rgba(95, 201, 138, 0.15);
+
+    --shadow-panel: 0 1px 0 rgba(255,255,255,.03) inset,
+                    0 16px 40px -20px rgba(0,0,0,.8);
+    color-scheme: dark;
+  }
+
+  /* ── Light token set ────────────────────────────────────────────
+     `.light-mode`   — the console's light theme, toggled by the user.
+     `.tokens-light` — scoped to always-light surfaces (marketing, auth)
+                       so component tokens never resolve from the dark
+                       palette while sitting on a white ground.
+     ─────────────────────────────────────────────────────────────── */
+  .light-mode,
+  .tokens-light {
+    --surface-0: #F2F3F0;
+    --surface-1: #FFFFFF;
+    --surface-2: #FCFCFA;
+    --surface-in:#F5F7F8;
+    --line-1:    #E2E5E1;
+    --line-2:    #CDD2CD;
+
+    --text-1:    #131A21;
+    --text-2:    #33414E;
+    --text-3:    #4C5C6B;
+    --text-4:    #6B7B8A;
+
+    --accent:      #0E7C6B;
+    --accent-quiet:#0A5A4E;
+    --accent-wash: rgba(14, 124, 107, 0.08);
+    --accent-line: rgba(14, 124, 107, 0.24);
+
+    --sev-block: #C0392F;
+    --sev-warn:  #B5761B;
+    --sev-allow: #2E7D52;
+    --sev-block-wash: rgba(192, 57, 47, 0.08);
+    --sev-warn-wash:  rgba(181, 118, 27, 0.09);
+    --sev-allow-wash: rgba(46, 125, 82, 0.08);
+
+    --shadow-panel: 0 1px 2px rgba(10,14,18,.05),
+                    0 12px 32px -16px rgba(10,14,18,.16);
+    color-scheme: light;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--surface-0);
+    color: var(--text-1);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display",
+                 "Segoe UI", system-ui, "Helvetica Neue", Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-synthesis-weight: none;
+  }
+
+  h1, h2, h3, h4 { text-wrap: balance; margin: 0; }
+  p { text-wrap: pretty; }
+
+  /* Digits must never jitter in tables, meters, or counters. */
+  table, .tabular, [data-tabular] { font-variant-numeric: tabular-nums; }
+
+  /* Visible, on-brand focus — never remove it. */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::selection { background: var(--accent-wash); color: var(--text-1); }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line-2);
+    border: 3px solid var(--surface-0);
+    border-radius: 99px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-4); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
-/* ── Dark mode (default) ──────────────────────────────────────── */
-body {
-  background: #030712;
-  color: #f9fafb;
+/* ═══════════════════════════════════════════════════════════════
+   Components
+   ═══════════════════════════════════════════════════════════════ */
+@layer components {
+
+  /* ── The mono label system — the product's instrument voice ─── */
+  .eyebrow {
+    font-family: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+    font-size: 0.6875rem;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--text-4);
+    font-weight: 500;
+  }
+  .eyebrow-accent { color: var(--accent); }
+
+  .mono { font-family: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, monospace; }
+
+  /* ── Surfaces ───────────────────────────────────────────────── */
+  .panel {
+    background: var(--surface-1);
+    border: 1px solid var(--line-1);
+    border-radius: 6px;
+  }
+  .panel-raised { background: var(--surface-2); box-shadow: var(--shadow-panel); }
+
+  /* ── Severity + action encoding: form, not just number ──────── */
+  .tag {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+    font-size: 0.625rem; letter-spacing: 0.09em; text-transform: uppercase;
+    font-weight: 600; padding: 2px 7px; border-radius: 3px;
+    border: 1px solid transparent; white-space: nowrap;
+  }
+  .tag-block { color: var(--sev-block); background: var(--sev-block-wash); border-color: color-mix(in srgb, var(--sev-block) 42%, transparent); }
+  .tag-warn  { color: var(--sev-warn);  background: var(--sev-warn-wash);  border-color: color-mix(in srgb, var(--sev-warn) 42%, transparent); }
+  .tag-allow { color: var(--sev-allow); background: var(--sev-allow-wash); border-color: color-mix(in srgb, var(--sev-allow) 42%, transparent); }
+  .tag-quiet { color: var(--text-3);    background: var(--surface-in);     border-color: var(--line-1); }
+  .tag-accent{ color: var(--accent);    background: var(--accent-wash);    border-color: var(--accent-line); }
+
+  /* Severity stripe — lets a row's state read before any text does.
+     Uses inset box-shadow rather than an absolutely-positioned ::before so it
+     works identically on <tr> (where abs-positioned pseudo-elements are
+     unreliable) and on ordinary block rows. */
+  .stripe-block, .stripe-block > td:first-child { box-shadow: inset 2px 0 0 var(--sev-block); }
+  .stripe-warn,  .stripe-warn  > td:first-child { box-shadow: inset 2px 0 0 var(--sev-warn); }
+  .stripe-allow, .stripe-allow > td:first-child { box-shadow: inset 2px 0 0 var(--sev-allow); }
+  /* A row carrying cells delegates the stripe to its first cell only. */
+  tr.stripe-block, tr.stripe-warn, tr.stripe-allow { box-shadow: none; }
+
+  /* ── Controls ───────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    font-size: 0.875rem; font-weight: 560; border-radius: 4px;
+    padding: 0.625rem 1.125rem; border: 1px solid transparent;
+    transition: background-color .15s cubic-bezier(.2,.8,.2,1),
+                border-color .15s, color .15s, transform .1s;
+    cursor: pointer; white-space: nowrap; text-decoration: none;
+  }
+  .btn:active { transform: translateY(0.5px); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  .btn-primary { background: var(--accent); color: #041410; }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-quiet); }
+  .light-mode .btn-primary { color: #FFFFFF; }
+
+  .btn-secondary {
+    background: transparent; color: var(--text-1); border-color: var(--line-2);
+  }
+  .btn-secondary:hover:not(:disabled) { border-color: var(--text-4); background: var(--surface-2); }
+
+  .btn-ghost { background: transparent; color: var(--text-2); }
+  .btn-ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--text-1); }
+
+  .field {
+    width: 100%; background: var(--surface-in); color: var(--text-1);
+    border: 1px solid var(--line-2); border-radius: 4px;
+    padding: 0.625rem 0.8125rem; font-size: 0.875rem;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .field::placeholder { color: var(--text-4); }
+  .field:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-wash);
+  }
+  .field-label {
+    display: block; font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.625rem; letter-spacing: 0.13em; text-transform: uppercase;
+    color: var(--text-4); margin-bottom: 6px; font-weight: 500;
+  }
+
+  /* ── Hairline rule that reads as a boundary, not decoration ─── */
+  .rule { height: 1px; background: var(--line-1); border: 0; }
+
+  .skeleton {
+    background: linear-gradient(90deg, var(--surface-1) 25%, var(--surface-2) 50%, var(--surface-1) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shift 1.4s ease-in-out infinite;
+    border-radius: 3px;
+  }
+  @keyframes skeleton-shift {
+    from { background-position: 200% 0; }
+    to   { background-position: -200% 0; }
+  }
 }
 
-/* ── Light mode overrides ─────────────────────────────────────── */
-.light-mode body,
-body.light-mode {
-  background: #f1f5f9;
-  color: #0f172a;
+/* ═══════════════════════════════════════════════════════════════
+   Compatibility layer
+   Pages not yet migrated to the token system still use literal
+   Tailwind greys (bg-gray-950, text-white, border-gray-800 …).
+   Remapping them here keeps those screens coherent and correctly
+   themed in BOTH modes until each page is rebuilt. Delete a rule
+   once no page depends on it.
+   ═══════════════════════════════════════════════════════════════ */
+@layer utilities {
+  .bg-gray-950 { background-color: var(--surface-0) !important; }
+  .bg-gray-900 { background-color: var(--surface-1) !important; }
+  .bg-gray-800 { background-color: var(--surface-2) !important; }
+  .bg-gray-800\/50,
+  .bg-gray-800\/80,
+  .bg-gray-800\/30 { background-color: var(--surface-2) !important; }
+  .bg-gray-700 { background-color: var(--surface-in) !important; }
+
+  .border-gray-800,
+  .border-gray-800\/60,
+  .border-gray-800\/50,
+  .border-gray-800\/40 { border-color: var(--line-1) !important; }
+  .border-gray-700 { border-color: var(--line-2) !important; }
+
+  .text-white     { color: var(--text-1) !important; }
+  .text-gray-200,
+  .text-gray-300  { color: var(--text-2) !important; }
+  .text-gray-400  { color: var(--text-3) !important; }
+  .text-gray-500,
+  .text-gray-600,
+  .text-gray-700  { color: var(--text-4) !important; }
+
+  /* Indigo/purple was the old brand. Route it to the signal accent so
+     un-migrated pages stop reading as a different product. */
+  .text-indigo-400, .text-indigo-300, .text-indigo-500 { color: var(--accent) !important; }
+  .bg-indigo-600, .bg-indigo-500 { background-color: var(--accent) !important; }
+  .border-indigo-500, .border-indigo-600 { border-color: var(--accent) !important; }
+
+  .grid-lines {
+    background-image:
+      linear-gradient(to right, var(--line-1) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--line-1) 1px, transparent 1px);
+    background-size: 64px 64px;
+  }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { scrollbar-width: none; }
 }
-
-/* Sidebar */
-.light-mode .sidebar-root {
-  background: #ffffff !important;
-  border-color: #e2e8f0 !important;
-}
-
-/* Main content bg */
-.light-mode .main-content {
-  background: #f1f5f9 !important;
-}
-
-/* Cards */
-.light-mode .card {
-  background: #ffffff !important;
-  border-color: #e2e8f0 !important;
-  color: #1e293b !important;
-}
-
-/* Nav links in light mode */
-.light-mode .nav-item {
-  color: #475569 !important;
-}
-.light-mode .nav-item:hover {
-  background: #f1f5f9 !important;
-  color: #1e293b !important;
-}
-.light-mode .nav-item.active {
-  background: #ede9fe !important;
-  color: #6366f1 !important;
-  border-color: #c4b5fd !important;
-}
-
-/* Text */
-.light-mode .text-white { color: #0f172a !important; }
-.light-mode .text-gray-200 { color: #334155 !important; }
-.light-mode .text-gray-300 { color: #475569 !important; }
-.light-mode .text-gray-400 { color: #64748b !important; }
-.light-mode .text-gray-500 { color: #94a3b8 !important; }
-.light-mode .text-gray-600 { color: #94a3b8 !important; }
-.light-mode .text-gray-700 { color: #cbd5e1 !important; }
-
-/* Backgrounds */
-.light-mode .bg-gray-950  { background-color: #f1f5f9 !important; }
-.light-mode .bg-gray-900  { background-color: #ffffff !important; }
-.light-mode .bg-gray-800  { background-color: #f8fafc !important; }
-.light-mode .bg-gray-700  { background-color: #f1f5f9 !important; }
-
-/* Borders */
-.light-mode .border-gray-800 { border-color: #e2e8f0 !important; }
-.light-mode .border-gray-700 { border-color: #cbd5e1 !important; }
-
-/* Inputs */
-.light-mode input,
-.light-mode textarea,
-.light-mode select {
-  background: #f8fafc !important;
-  border-color: #cbd5e1 !important;
-  color: #0f172a !important;
-}
-.light-mode input::placeholder,
-.light-mode textarea::placeholder {
-  color: #94a3b8 !important;
-}
-
-/* Hover bg */
-.light-mode .hover\:bg-gray-800\/30:hover { background-color: rgba(241,245,249,0.8) !important; }
-.light-mode .hover\:bg-white\/\[0\.02\]:hover { background-color: rgba(241,245,249,0.5) !important; }
-.light-mode .hover\:bg-white\/5:hover { background-color: rgba(241,245,249,0.9) !important; }
-
-/* Sidebar specific */
-.light-mode .bg-gray-950.border-r { background-color: #ffffff !important; border-color: #e2e8f0 !important; }
-
-/* Chat bubbles in light mode */
-.light-mode .bg-gray-800.rounded-2xl { background-color: #f1f5f9 !important; }
-.light-mode .bg-gray-800\/80 { background-color: #f8fafc !important; }
-
-/* Scrollbar */
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #374151; border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: #4b5563; }
-.light-mode ::-webkit-scrollbar-thumb { background: #cbd5e1; }
-.light-mode ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-
-/* ── Animations ────────────────────────────────────────────────── */
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(16px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-@keyframes shimmer {
-  0%   { background-position: -200% 0; }
-  100% { background-position:  200% 0; }
-}
-
-.animate-fadeInUp  { animation: fadeInUp 0.4s ease forwards; }
-.animate-fadeIn    { animation: fadeIn 0.3s ease forwards; }
-
-/* Stagger children */
-.stagger > *:nth-child(1) { animation-delay: 0ms; }
-.stagger > *:nth-child(2) { animation-delay: 60ms; }
-.stagger > *:nth-child(3) { animation-delay: 120ms; }
-.stagger > *:nth-child(4) { animation-delay: 180ms; }
-
-/* ── Skeleton loader ─────────────────────────────────────────────── */
-.skeleton {
-  background: linear-gradient(90deg, #1f2937 25%, #2d3748 50%, #1f2937 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-  border-radius: 8px;
-}
-.light-mode .skeleton {
-  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
-  background-size: 200% 100%;
-}
-
-/* ── Stat card hover ─────────────────────────────────────────────── */
-.stat-card {
-  position: relative;
-  overflow: hidden;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-.stat-card:hover { transform: translateY(-2px); }
-
-/* ── Risk bar ──────────────────────────────────────────────────── */
-.risk-bar-fill { transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); }
-
-/* ── Input focus ring ─────────────────────────────────────────── */
-.input-field { transition: border-color 0.2s ease, box-shadow 0.2s ease; }
-.input-field:focus {
-  border-color: #6366f1 !important;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
-  outline: none;
-}
-
-/* ── Button ───────────────────────────────────────────────────── */
-.btn-primary { transition: all 0.15s ease; }
-.btn-primary:active { transform: scale(0.97); }
-
-/* ── Badge hover ──────────────────────────────────────────────── */
-.badge { transition: transform 0.15s ease; }
-.badge:hover { transform: scale(1.05); }
