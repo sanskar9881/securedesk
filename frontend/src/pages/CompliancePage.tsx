@@ -27,7 +27,7 @@ export default function CompliancePage() {
     window.open(`${base}/api/compliance/report`, "_blank");
   };
 
-  const scoreColor = !score ? "#6366f1"
+  const scoreColor = !score ? "#1657C4"
     : score.score >= 80 ? "#22c55e"
     : score.score >= 60 ? "#f59e0b" : "#ef4444";
 

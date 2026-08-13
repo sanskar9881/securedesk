@@ -1,4 +1,5 @@
 import os, uuid, hmac, hashlib
+from core.errors import safe_502
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -119,7 +120,9 @@ async def create_order(body: CreateOrder, user=Depends(get_current_user)):
             "key_id":    razorpay_key,
         }
     except Exception as e:
-        raise HTTPException(500, f"Payment gateway error: {str(e)}")
+        # The gateway's message can carry key ids and internal detail — log it,
+        # return a clean reference to the caller.
+        raise safe_502("razorpay create_order", e)
 
 
 @router.post("/verify")

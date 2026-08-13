@@ -92,7 +92,11 @@ export default function Header({ title, subtitle, actions }: Props) {
           </button>
 
           <button
+            onClick={() =>
+              navigate(user?.role === "admin" || user?.role === "manager" ? "/ueba" : "/activity")
+            }
             aria-label={alerts ? `${alerts} unread alerts` : "Alerts"}
+            title={alerts ? `${alerts} unread alerts` : "No unread alerts"}
             className={iconBtn}
             style={iconStyle}
             onMouseEnter={hoverOn}

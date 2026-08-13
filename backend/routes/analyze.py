@@ -11,6 +11,7 @@ from services.logger_service import log_event
 from services.watermark_service import apply_watermark
 from services.ueba_service import check_anomalies
 from services.email_alert_service import send_alert_email
+from core.uploads import read_validated_upload
 
 router = APIRouter()
 
@@ -74,8 +75,11 @@ async def analyze_upload(
     watermark: bool  = Form(True),
     user             = Depends(get_current_user),
 ):
-    content  = await file.read()
-    filename = file.filename or "unknown"
+    # Streams with a hard size ceiling, rejects executables, and requires the
+    # sniffed magic bytes to agree with the declared extension.
+    upload   = await read_validated_upload(file)
+    content  = upload.content
+    filename = upload.filename
     text     = extract_text(content, filename)
     h        = sha256(content)
     findings = scan(text, filename)
@@ -169,6 +173,30 @@ async def get_alerts(user=Depends(get_current_user)):
         if hasattr(d.get("timestamp"),"isoformat"): d["timestamp"] = d["timestamp"].isoformat()
         out.append(d)
     return out
+
+
+@router.post("/alerts/{alert_id}/read")
+async def mark_alert_read(alert_id: str, user=Depends(get_current_user)):
+    """
+    Acknowledge an alert. A plain user may only acknowledge alerts raised
+    against their own activity; admins and managers may acknowledge any.
+    """
+    q = {"_id": alert_id}
+    if user.get("role") not in ("admin", "manager"):
+        q["user_id"] = user["_id"]
+
+    result = await alerts_collection.update_one(
+        q, {"$set": {"read": True,
+                     "read_by": user["name"],
+                     "read_at": datetime.utcnow()}}
+    )
+    if result.matched_count == 0:
+        from fastapi import HTTPException
+        raise HTTPException(404, "That alert no longer exists.")
+
+    await log_event(user["_id"], user["name"], "alert_acknowledged",
+                    extra={"alert_id": alert_id})
+    return {"acknowledged": True, "alert_id": alert_id}
 
 
 @router.get("/ueba")

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form
 from database import transactions_collection
 from routes.auth import get_current_user
 from ml.classifier import classify_transaction
+from core.uploads import read_validated_upload
 
 router = APIRouter()
 
@@ -191,14 +192,16 @@ async def send_file(
     content_analysis = None
 
     if file and file.filename:
-        filename = file.filename
-        content_bytes = await file.read()
-        file_size = len(content_bytes)
+        # Validated before the bytes are resident: size ceiling enforced while
+        # streaming, executables rejected, content type confirmed by magic bytes
+        # rather than trusting the extension.
+        upload = await read_validated_upload(file)
+        filename = upload.filename
+        content_bytes = upload.content
+        file_size = upload.size
 
-        # Deep content analysis for files under 10MB
-        if file_size < 10 * 1024 * 1024:
-            extracted_text = extract_text(content_bytes, filename)
-            content_analysis = analyze_content(extracted_text, filename)
+        extracted_text = extract_text(content_bytes, filename)
+        content_analysis = analyze_content(extracted_text, filename)
 
     # ML classification on email metadata
     result = classify_transaction(subject, body, filename)

@@ -18,7 +18,7 @@ export type Bucket = { label: string; full: string; allow: number; warn: number;
 const SERIES = [
   { key: "block" as const, label: "High", token: "var(--sev-block)" },
   { key: "warn" as const, label: "Medium", token: "var(--sev-warn)" },
-  { key: "allow" as const, label: "Low", token: "var(--sev-allow)" },
+  { key: "allow" as const, label: "Low", token: "color-mix(in srgb, var(--sev-allow) 58%, var(--surface-1))" },
 ];
 
 /* ── Stacked volume over time ──────────────────────────────────── */
@@ -32,8 +32,12 @@ export function EventVolume({ data, height = 168 }: { data: Bucket[]; height?: n
   const top = Math.ceil(max / step) * step;
   const ticks = Array.from({ length: top / step + 1 }, (_, i) => i * step);
 
-  const PAD_L = 30;
-  const PAD_B = 20;
+  // The SVG is stretched to fill its container (preserveAspectRatio="none"),
+  // which would distort any text inside it — so axis labels live in HTML
+  // alongside the plot, and the SVG carries marks only.
+  const AXIS_W = 30; // px reserved for the y-axis label column
+  const PAD_L = 0;
+  const PAD_B = 0;
   const W = 100; // viewBox units, scaled by CSS
   const plotH = height - PAD_B;
   const slot = (W - PAD_L) / Math.max(data.length, 1);
@@ -42,7 +46,21 @@ export function EventVolume({ data, height = 168 }: { data: Bucket[]; height?: n
   const y = (v: number) => plotH - (v / top) * (plotH - 6);
 
   return (
-    <div className="relative">
+    <div className="relative flex" style={{ gap: 8 }}>
+      {/* y axis, in HTML so the glyphs never distort */}
+      <div className="relative flex-none" style={{ width: AXIS_W, height }} aria-hidden="true">
+        {ticks.map((t) => (
+          <span
+            key={t}
+            className="mono text-[9.5px] absolute right-0 tabular-nums"
+            style={{ top: y(t) - 6, color: "var(--text-4)" }}
+          >
+            {t}
+          </span>
+        ))}
+      </div>
+
+      <div className="flex-1 min-w-0">
       <svg
         viewBox={`0 0 ${W} ${height}`}
         width="100%"
@@ -54,20 +72,12 @@ export function EventVolume({ data, height = 168 }: { data: Bucket[]; height?: n
       >
         {/* recessive gridlines */}
         {ticks.map((t) => (
-          <g key={t}>
-            <line
-              x1={PAD_L} x2={W} y1={y(t)} y2={y(t)}
-              stroke="var(--line-1)" strokeWidth="0.5"
-              vectorEffect="non-scaling-stroke"
-            />
-            <text
-              x={PAD_L - 5} y={y(t) + 3} textAnchor="end"
-              fill="var(--text-4)" fontSize="8"
-              style={{ fontFamily: "ui-monospace, monospace", fontVariantNumeric: "tabular-nums" }}
-            >
-              {t}
-            </text>
-          </g>
+          <line
+            key={t}
+            x1={PAD_L} x2={W} y1={y(t)} y2={y(t)}
+            stroke="var(--line-1)" strokeWidth="0.5"
+            vectorEffect="non-scaling-stroke"
+          />
         ))}
 
         {data.map((d, i) => {
@@ -126,7 +136,7 @@ export function EventVolume({ data, height = 168 }: { data: Bucket[]; height?: n
       </svg>
 
       {/* x labels — thinned so they never collide */}
-      <div className="flex" style={{ paddingLeft: `${(PAD_L / W) * 100}%` }}>
+      <div className="flex mt-1.5">
         {data.map((d, i) => {
           const every = data.length > 10 ? Math.ceil(data.length / 6) : 1;
           return (
@@ -150,7 +160,7 @@ export function EventVolume({ data, height = 168 }: { data: Bucket[]; height?: n
             border: "1px solid var(--line-2)",
             boxShadow: "var(--shadow-panel)",
             top: 4,
-            left: `${Math.min(Math.max(((PAD_L + slot * hover + slot / 2) / W) * 100, 8), 78)}%`,
+            left: `${Math.min(Math.max(((slot * hover + slot / 2) / W) * 100, 6), 74)}%`,
           }}
           role="status"
         >
@@ -168,6 +178,7 @@ export function EventVolume({ data, height = 168 }: { data: Bucket[]; height?: n
           ))}
         </div>
       )}
+      </div>
       <span id={gid} className="sr-only" />
     </div>
   );

@@ -19,7 +19,7 @@ export default function AuthShell({
   return (
     <div className="tokens-light min-h-screen bg-paper text-slate-900 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,520px)]">
       {/* ── Instrument panel ──────────────────────────────────── */}
-      <aside className="hidden lg:flex flex-col justify-between bg-ink text-slate-200 p-10 xl:p-14 relative overflow-hidden">
+      <aside className="tokens-dark hidden lg:flex flex-col justify-between bg-ink text-slate-200 p-10 xl:p-14 relative overflow-hidden">
         <div
           className="absolute inset-0 opacity-[0.35] pointer-events-none"
           style={{

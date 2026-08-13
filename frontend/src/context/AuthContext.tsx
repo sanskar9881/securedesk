@@ -57,7 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const role   = (localStorage.getItem("role") || "user") as User["role"];
     const name   = localStorage.getItem("name");
     const id     = localStorage.getItem("user_id") || "";
-    const color  = localStorage.getItem("avatar_color") || "#6366f1";
+    const color  = localStorage.getItem("avatar_color") || "#1657C4";
     const lang   = localStorage.getItem("language") || "en";
 
     if (token && name) {
@@ -77,14 +77,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("role",         cleanRole);
     localStorage.setItem("name",         name);
     localStorage.setItem("user_id",      userId);
-    localStorage.setItem("avatar_color", "#6366f1");
+    localStorage.setItem("avatar_color", "#1657C4");
 
     setUser({
       id:           userId,
       token,
       role:         cleanRole,
       name,
-      avatar_color: "#6366f1",
+      avatar_color: "#1657C4",
       language:     "en",
     });
   };

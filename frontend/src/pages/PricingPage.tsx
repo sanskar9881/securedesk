@@ -62,7 +62,7 @@ export default function PricingPage() {
           } catch { toast.error("Payment verification failed"); }
         },
         prefill: { name: user?.name || "", email: "" },
-        theme: { color: "#6366f1" },
+        theme: { color: "#1657C4" },
       });
       rzp.open();
     } catch (e: any) {

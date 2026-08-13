@@ -443,7 +443,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── CTA ─────────────────────────────────────────────────── */}
-      <section className="bg-ink text-slate-100">
+      <section className="tokens-dark bg-ink text-slate-100">
         <div className="max-w-shell mx-auto px-6 lg:px-8 py-20 lg:py-28">
           <div className="max-w-narrow">
             <p className="eyebrow eyebrow-accent mb-5" style={{ color: "#6CB0FF" }}>
@@ -474,7 +474,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Footer ──────────────────────────────────────────────── */}
-      <footer className="bg-ink border-t border-[#363E48] text-slate-400">
+      <footer className="tokens-dark bg-ink border-t border-[#363E48] text-slate-400">
         <div className="max-w-shell mx-auto px-6 lg:px-8 py-10">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
             <div className="text-slate-300">
