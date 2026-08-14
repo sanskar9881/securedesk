@@ -5,7 +5,7 @@ import Mark from "./Mark";
 import {
   LayoutDashboard, Send, LogOut, Users, History, ShieldAlert,
   MessageSquare, ScanLine, Brain, Activity, Database, FileCheck,
-  TrendingUp, Building2, MessageCircle, CreditCard, Menu, X, Settings,
+  TrendingUp, Building2, MessageCircle, Menu, X, Settings,
 } from "lucide-react";
 
 type Item = { to: string; icon: React.ReactNode; label: string };
@@ -101,7 +101,7 @@ export default function Navbar() {
       <button
         onClick={() => setOpen(true)}
         aria-label="Open navigation"
-        className="md:hidden fixed top-3 left-3 z-[60] w-9 h-9 rounded flex items-center justify-center"
+        className="lg:hidden fixed top-3 left-3 z-[60] w-9 h-9 rounded flex items-center justify-center"
         style={{ background: "var(--surface-1)", border: "1px solid var(--line-2)", color: "var(--text-2)" }}
       >
         <Menu className="w-4 h-4" />
@@ -109,14 +109,14 @@ export default function Navbar() {
 
       {open && (
         <div
-          className="md:hidden fixed inset-0 z-[65] bg-black/60 backdrop-blur-[2px]"
+          className="lg:hidden fixed inset-0 z-[65] bg-black/60 backdrop-blur-[2px]"
           onClick={() => setOpen(false)}
         />
       )}
 
       <div
         className={`fixed left-0 top-0 h-screen w-64 z-[70] flex flex-col transition-transform duration-200 ease-swift
-          ${open ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
+          ${open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
         style={{ background: "var(--surface-1)", borderRight: "1px solid var(--line-1)" }}
       >
         {/* brand */}
@@ -136,7 +136,7 @@ export default function Navbar() {
           <button
             onClick={() => setOpen(false)}
             aria-label="Close navigation"
-            className="md:hidden p-1 rounded"
+            className="lg:hidden p-1 rounded"
             style={{ color: "var(--text-3)" }}
           >
             <X className="w-4 h-4" />

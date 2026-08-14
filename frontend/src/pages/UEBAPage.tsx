@@ -27,7 +27,9 @@ export default function UEBAPage() {
       ]);
       setUeba(uebaRes.data);
       setAlerts(alertsRes.data.filter((a: Alert) => a.type === "UEBA_ANOMALY" || a.severity === "HIGH" || a.severity === "MEDIUM"));
-    } catch {}
+    } catch {
+      /* non-critical fetch: the view renders its empty state instead */
+    }
     setLoading(false);
   };
 
@@ -41,7 +43,7 @@ export default function UEBAPage() {
   return (
     <div className="flex">
       <Navbar />
-      <main className="ml-0 md:ml-64 flex-1 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300">
+      <main className="ml-0 lg:ml-64 flex-1 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300">
         <div className="mb-8 flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">Behavior Analytics (UEBA)</h1>

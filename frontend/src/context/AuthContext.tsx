@@ -128,6 +128,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// `useAuth` ships beside its provider by design; splitting it would mean
+// touching every import for no runtime benefit. Fast-refresh only loses
+// state for this one file during development.
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => {
   const c = useContext(AuthContext);
   if (!c) throw new Error("useAuth must be inside AuthProvider");

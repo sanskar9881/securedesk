@@ -121,7 +121,7 @@ export default function PhishingPage() {
   return (
     <div className="flex">
       <Navbar />
-      <main className="ml-0 md:ml-64 flex-1 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300">
+      <main className="ml-0 lg:ml-64 flex-1 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300">
         <Header title="Phishing Detector" subtitle="Instantly check any email or message for threats" />
 
         {/* Email Connect Banner */}

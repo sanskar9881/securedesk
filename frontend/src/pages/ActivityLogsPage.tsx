@@ -22,7 +22,7 @@ export default function ActivityLogsPage() {
   return (
     <div className="flex">
       <Navbar/>
-      <main className="ml-0 md:ml-64 flex-1 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300">
+      <main className="ml-0 lg:ml-64 flex-1 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300">
         <div className="mb-8"><h1 className="text-2xl font-bold text-white">Activity Logs</h1><p className="text-gray-500 text-sm mt-1">Real-time audit trail of all file operations</p></div>
         <div className="grid grid-cols-4 gap-4 mb-6">
           {[{l:"Total Events",v:logs.length,c:"text-white"},{l:"High Risk",v:logs.filter(l=>l.risk_level==="HIGH").length,c:"text-red-400"},

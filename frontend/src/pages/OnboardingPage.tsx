@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
+import { apiErrorMessage } from "../api/errors";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
 import { Shield, FileCheck, CheckCircle, ChevronRight, Loader2, User } from "lucide-react";
@@ -14,15 +15,14 @@ export default function OnboardingPage() {
   const [fullName, setFullName] = useState(user?.name || "");
   const [dept, setDept]         = useState("");
   const [loading, setLoading]   = useState(false);
-  const [signed, setSigned]     = useState(false);
 
   useEffect(() => {
     api.get("/onboarding/nda/text").then(({ data }) => setNdaText(data.nda_text)).catch(() => {});
     api.get("/onboarding/status").then(({ data }) => {
       if (data.onboarding_complete) navigate("/dashboard");
-      if (data.nda_signed) { setSigned(true); setStep(2); }
+      if (data.nda_signed) setStep(2);
     }).catch(() => {});
-  }, []);
+  }, [navigate]);
 
   const signNDA = async () => {
     if (!agreed) return toast.error("You must agree to the NDA");
@@ -30,11 +30,10 @@ export default function OnboardingPage() {
     setLoading(true);
     try {
       await api.post("/onboarding/nda/sign", { agreed: true, full_name: fullName });
-      setSigned(true);
       setStep(2);
       toast.success("NDA signed successfully!");
-    } catch (e: any) {
-      toast.error(e.response?.data?.detail || "Failed to sign");
+    } catch (e: unknown) {
+      toast.error(apiErrorMessage(e, "Failed to sign"));
     } finally { setLoading(false); }
   };
 
@@ -44,8 +43,8 @@ export default function OnboardingPage() {
       await api.post("/onboarding/complete", { department: dept });
       toast.success("Welcome to the team! Setup complete.");
       navigate("/dashboard");
-    } catch (e: any) {
-      toast.error(e.response?.data?.detail || "Failed");
+    } catch (e: unknown) {
+      toast.error(apiErrorMessage(e, "Failed"));
     } finally { setLoading(false); }
   };
 

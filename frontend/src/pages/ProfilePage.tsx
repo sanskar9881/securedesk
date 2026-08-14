@@ -3,7 +3,7 @@ import Navbar from "../components/Navbar";
 import api from "../api/axios";
 import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
-import { Camera, Edit3, Save, X, Calendar, Mail, Phone, Shield, User, ArrowLeft, Users, BarChart3, Settings, Lock, Globe } from "lucide-react";
+import { Camera, Edit3, Save, X, Calendar, Mail, Phone, Shield, User, ArrowLeft, Users, BarChart3, Settings, Lock } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const AVATAR_COLORS = [

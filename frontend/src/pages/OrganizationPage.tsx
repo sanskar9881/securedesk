@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import Navbar from "../components/Navbar";
 import api from "../api/axios";
+import { apiErrorMessage } from "../api/errors";
 import toast from "react-hot-toast";
 import { Building2, Users, UserPlus, Copy, CheckCircle, Loader2, Globe, Briefcase } from "lucide-react";
 
-interface Org { _id:string; name:string; domain:string; industry:string; size:string; owner_name:string; plan:string; created_at:string; members:any[]; }
+interface Org { _id:string; name:string; domain:string; industry:string; size:string; owner_name:string; plan:string; created_at:string; members: { user_id: string; name: string; role: string }[]; }
 interface Member { _id:string; name:string; role:string; email:string; created_at:string; }
 
 export default function OrganizationPage() {
@@ -24,7 +25,9 @@ export default function OrganizationPage() {
       const [orgRes, memRes] = await Promise.all([api.get("/org/me"), api.get("/org/members")]);
       setOrg(orgRes.data.org);
       setMembers(memRes.data);
-    } catch {}
+    } catch {
+      /* non-critical fetch: the view renders its empty state instead */
+    }
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
@@ -36,8 +39,8 @@ export default function OrganizationPage() {
       await api.post("/org/create", form);
       toast.success("Organization created!");
       load();
-    } catch (e: any) {
-      toast.error(e.response?.data?.detail || "Failed to create");
+    } catch (e: unknown) {
+      toast.error(apiErrorMessage(e, "Failed to create"));
     } finally { setCreating(false); }
   };
 
@@ -49,8 +52,8 @@ export default function OrganizationPage() {
       setInvLink(data.join_link);
       toast.success(`Invitation created for ${invForm.email}`);
       setInvForm({ email:"", role:"user" });
-    } catch (e: any) {
-      toast.error(e.response?.data?.detail || "Invite failed");
+    } catch (e: unknown) {
+      toast.error(apiErrorMessage(e, "Invite failed"));
     } finally { setInviting(false); }
   };
 

@@ -104,7 +104,7 @@ export default function UserDashboard() {
 
         {/* ── Personal metrics ──────────────────────────────── */}
         <div
-          className="grid grid-cols-3 gap-px rounded-md overflow-hidden mb-5"
+          className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-px rounded-md overflow-hidden mb-5"
           style={{ background: "var(--line-1)", border: "1px solid var(--line-1)" }}
         >
           {[
@@ -129,7 +129,7 @@ export default function UserDashboard() {
         </div>
 
         {/* ── History ───────────────────────────────────────── */}
-        <section className="rounded-md overflow-hidden" style={{ border: "1px solid var(--line-1)" }}>
+        <section className="rounded-md overflow-hidden min-w-0" style={{ border: "1px solid var(--line-1)" }}>
           <div
             className="px-4 py-2.5 flex items-center justify-between"
             style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--line-1)" }}

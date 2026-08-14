@@ -1,6 +1,18 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
+
+interface RazorpayResult {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+}
+declare global {
+  interface Window {
+    Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
+  }
+}
+import { apiErrorMessage } from "../api/errors";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
 import { Shield, CheckCircle, Zap, Building2, Loader2, Crown } from "lucide-react";
@@ -22,7 +34,7 @@ export default function PricingPage() {
     api.get("/billing/subscription").then(({ data }) => setCurrentPlan(data.plan)).catch(() => {});
   }, []);
 
-  const handleUpgrade = async (planId: string, planPrice: number) => {
+  const handleUpgrade = async (planId: string) => {
     if (!user) { navigate("/login"); return; }
     setLoading(planId);
     try {
@@ -42,14 +54,14 @@ export default function PricingPage() {
       }
 
       // Real Razorpay checkout
-      const rzp = new (window as any).Razorpay({
+      const rzp = new window.Razorpay!({
         key:         data.key_id,
         amount:      data.amount,
         currency:    "INR",
         name:        "SecureDesk",
         description: `${plans[planId]?.name} Plan - Monthly`,
         order_id:    data.order_id,
-        handler: async (response: any) => {
+        handler: async (response: RazorpayResult) => {
           try {
             await api.post("/billing/verify", {
               razorpay_order_id:   response.razorpay_order_id,
@@ -65,8 +77,8 @@ export default function PricingPage() {
         theme: { color: "#1657C4" },
       });
       rzp.open();
-    } catch (e: any) {
-      toast.error(e.response?.data?.detail || "Payment failed");
+    } catch (e: unknown) {
+      toast.error(apiErrorMessage(e, "Payment failed"));
     } finally { setLoading(null); }
   };
 
@@ -165,7 +177,7 @@ export default function PricingPage() {
                   </div>
                 ) : (
                   <button
-                    onClick={() => handleUpgrade(planId, plan.price_inr)}
+                    onClick={() => handleUpgrade(planId)}
                     disabled={loading === planId}
                     className={`w-full py-3 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2 transition shadow-lg disabled:opacity-50 ${btnColors[planId]}`}>
                     {loading === planId ? <Loader2 className="w-4 h-4 animate-spin" /> : null}

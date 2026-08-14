@@ -121,7 +121,7 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-md overflow-hidden" style={{ border: "1px solid var(--line-1)" }}>
+    <section className="rounded-md overflow-hidden min-w-0" style={{ border: "1px solid var(--line-1)" }}>
       <div
         className="px-4 py-2.5 flex items-center justify-between gap-3"
         style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--line-1)" }}
@@ -184,9 +184,11 @@ export default function AdminDashboard() {
     ])
       .then(([s, l, a]) => {
         if (s.data) setStats(s.data as Stats);
-        const payload = (l.data as any)?.data ?? l.data;
+        const listed = l.data as { data?: Row[] } | Row[] | null;
+        const payload = Array.isArray(listed) ? listed : listed?.data;
         setRows(Array.isArray(payload) ? payload : []);
-        const av = Array.isArray(a.data) ? a.data : (a.data as any)?.alerts ?? [];
+        const alertBody = a.data as { alerts?: Alert[] } | Alert[] | null;
+        const av = Array.isArray(alertBody) ? alertBody : alertBody?.alerts ?? [];
         setAlerts(Array.isArray(av) ? av.slice(0, 6) : []);
       })
       .finally(() => setLoading(false));
@@ -237,7 +239,7 @@ export default function AdminDashboard() {
 
         {/* ── Summary strip ─────────────────────────────────── */}
         <div
-          className="grid grid-cols-2 lg:grid-cols-4 gap-px rounded-md overflow-hidden mb-5"
+          className="grid grid-cols-1 min-[420px]:grid-cols-2 lg:grid-cols-4 gap-px rounded-md overflow-hidden mb-5"
           style={{ background: "var(--line-1)", border: "1px solid var(--line-1)" }}
         >
           <Metric
@@ -272,9 +274,9 @@ export default function AdminDashboard() {
 
         {/* ── Event volume — the page's focal point ─────────── */}
         <div className="mb-5">
-          <section className="rounded-md overflow-hidden" style={{ border: "1px solid var(--line-1)" }}>
+          <section className="rounded-md overflow-hidden min-w-0" style={{ border: "1px solid var(--line-1)" }}>
             <div
-              className="px-4 py-2.5 flex items-center justify-between gap-4 flex-wrap"
+              className="px-4 py-2.5 flex items-center justify-between gap-x-4 gap-y-2 flex-wrap"
               style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--line-1)" }}
             >
               <div className="flex items-baseline gap-3">
@@ -336,7 +338,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* ── Event stream + alerts ─────────────────────────── */}
-        <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)] gap-5 items-start">
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)] gap-5 items-start min-w-0">
           <Panel title="Recent events" meta="Newest first" href="/activity" hrefLabel="Event stream">
             {loading ? (
               <div className="p-4 space-y-2.5">

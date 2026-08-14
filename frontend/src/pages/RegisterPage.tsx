@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, Loader2, AlertCircle, ArrowRight, Check } from "lucide-react";
 import api from "../api/axios";
+import { apiErrorMessage } from "../api/errors";
 import { useAuth } from "../context/AuthContext";
 import AuthShell, { AsideProof } from "../components/AuthShell";
 
@@ -55,10 +56,9 @@ export default function RegisterPage() {
       const role = (data.role || "user").toLowerCase();
       login(data.access_token, role, data.name, data.user_id || "");
       navigate(role === "admin" || role === "manager" ? "/admin" : "/dashboard");
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(
-        err.response?.data?.detail ||
-          "We couldn't create your account. Try again in a moment."
+        apiErrorMessage(err, "We couldn't create your account. Try again in a moment.")
       );
     } finally {
       setBusy(false);

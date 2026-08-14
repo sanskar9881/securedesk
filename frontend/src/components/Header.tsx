@@ -62,8 +62,8 @@ export default function Header({ title, subtitle, actions }: Props) {
         borderBottom: "1px solid var(--line-1)",
       }}
     >
-      <div className="h-14 flex items-center justify-between gap-4 pl-11 md:pl-0">
-        <div className="min-w-0">
+      <div className="h-14 flex items-center justify-between gap-2 sm:gap-4 pl-11 lg:pl-0 min-w-0">
+        <div className="min-w-0 flex-1">
           <h1
             className="text-[16.5px] font-semibold tracking-[-0.022em] truncate"
             style={{ color: "var(--text-1)" }}
@@ -218,7 +218,7 @@ export default function Header({ title, subtitle, actions }: Props) {
 export function Console({ children }: { children: React.ReactNode }) {
   return (
     <main
-      className="ml-0 md:ml-64 min-h-screen px-4 md:px-8 pb-16"
+      className="ml-0 lg:ml-64 min-w-0 max-w-full overflow-x-hidden min-h-screen px-4 md:px-8 pb-16"
       style={{ background: "var(--surface-0)" }}
     >
       {children}

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import Navbar from "../components/Navbar";
 import api from "../api/axios";
+import toast from "react-hot-toast";
+import { apiErrorMessage } from "../api/errors";
 import { ShieldCheck, AlertTriangle, FileText, ExternalLink, Loader2, RefreshCw, Download } from "lucide-react";
 
 interface Score {
@@ -21,10 +23,19 @@ export default function CompliancePage() {
   };
   useEffect(() => { load(); }, []);
 
-  const openReport = () => {
-    const token = localStorage.getItem("token");
-    const base  = (import.meta.env.VITE_API_URL || "http://localhost:8000/api").replace("/api","");
-    window.open(`${base}/api/compliance/report`, "_blank");
+  const openReport = async () => {
+    // window.open() sends no Authorization header, so hitting the endpoint
+    // directly returns 401. Fetch it through the authenticated client and
+    // hand the browser the HTML we got back.
+    try {
+      const { data } = await api.get("/compliance/report", { responseType: "text" });
+      const url = URL.createObjectURL(new Blob([data], { type: "text/html" }));
+      const tab = window.open(url, "_blank");
+      if (!tab) toast.error("Allow pop-ups to view the report.");
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (err: unknown) {
+      toast.error(apiErrorMessage(err, "Couldn't generate the report."));
+    }
   };
 
   const scoreColor = !score ? "#1657C4"
@@ -36,7 +47,7 @@ export default function CompliancePage() {
   return (
     <div className="flex">
       <Navbar />
-      <main className="ml-0 md:ml-64 flex-1 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300">
+      <main className="ml-0 lg:ml-64 flex-1 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300">
         <div className="mb-8 flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">DPDP Compliance</h1>

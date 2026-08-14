@@ -27,7 +27,9 @@ export default function WhatsAppLogsPage() {
       ]);
       setLogs(logsRes.data);
       setStats(statsRes.data);
-    } catch {}
+    } catch {
+      /* non-critical fetch: the view renders its empty state instead */
+    }
     setLoading(false);
   };
 
