@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Navbar from "../components/Navbar";
+import { useSidebar } from "../context/SidebarContext";
 import api from "../api/axios";
 import { Activity, Upload, Share2, Download, Shield, Loader2, RefreshCw } from "lucide-react";
 
@@ -10,6 +11,7 @@ const actCls  = (a:string) => a==="BLOCK"?"bg-red-900/40 text-red-400":a==="WARN
 const icons: Record<string,React.ReactNode> = { upload:<Upload className="w-3.5 h-3.5"/>, share:<Share2 className="w-3.5 h-3.5"/>, download:<Download className="w-3.5 h-3.5"/>, analyze:<Shield className="w-3.5 h-3.5"/> };
 
 export default function ActivityLogsPage() {
+  const { collapsed } = useSidebar();
   const [logs, setLogs]       = useState<Log[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter]   = useState("all");
@@ -22,7 +24,7 @@ export default function ActivityLogsPage() {
   return (
     <div className="flex">
       <Navbar/>
-      <main className="ml-0 lg:ml-64 flex-1 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300">
+      <main className={`ml-0 flex-1 min-w-0 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300 ${collapsed ? "lg:ml-[72px]" : "lg:ml-64"}`}>
         <div className="mb-8"><h1 className="text-2xl font-bold text-white">Activity Logs</h1><p className="text-gray-500 text-sm mt-1">Real-time audit trail of all file operations</p></div>
         <div className="grid grid-cols-4 gap-4 mb-6">
           {[{l:"Total Events",v:logs.length,c:"text-white"},{l:"High Risk",v:logs.filter(l=>l.risk_level==="HIGH").length,c:"text-red-400"},

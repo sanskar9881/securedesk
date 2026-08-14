@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Navbar from "../components/Navbar";
+import { useSidebar } from "../context/SidebarContext";
 import api from "../api/axios";
 import { Users } from "lucide-react";
 
@@ -13,6 +14,7 @@ interface UserRecord {
 }
 
 export default function AdminUsersPage() {
+  const { collapsed } = useSidebar();
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -26,7 +28,7 @@ export default function AdminUsersPage() {
   return (
     <div className="flex">
       <Navbar />
-      <main className="ml-64 flex-1 min-h-screen bg-gray-950 p-8">
+      <main className={`ml-0 min-w-0 flex-1 min-h-screen bg-gray-950 p-8 ${collapsed ? "lg:ml-[72px]" : "lg:ml-64"}`}>
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-white">Users</h1>
           <p className="text-gray-500 text-sm mt-1">All registered users ({users.length})</p>

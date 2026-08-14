@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import Navbar from "../components/Navbar";
+import { useSidebar } from "../context/SidebarContext";
 import api from "../api/axios";
 import toast from "react-hot-toast";
 import {
@@ -29,6 +30,7 @@ const SUGGESTIONS = [
 ];
 
 export default function ChatPage() {
+  const { collapsed } = useSidebar();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConv, setActiveConv] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -174,7 +176,7 @@ export default function ChatPage() {
   return (
     <div className="flex">
       <Navbar />
-      <main className="ml-64 flex-1 min-h-screen bg-gray-950 flex overflow-hidden" style={{ height: "100vh" }}>
+      <main className={`ml-0 min-w-0 flex-1 min-h-screen bg-gray-950 flex overflow-hidden ${collapsed ? "lg:ml-[72px]" : "lg:ml-64"}`} style={{ height: "100vh" }}>
 
         {/* Sidebar */}
         <div className="w-60 border-r border-gray-800 flex flex-col bg-gray-900/40 flex-shrink-0">

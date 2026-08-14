@@ -42,21 +42,23 @@ function InterceptPanel() {
 
   return (
     <div
-      className="rounded-lg border border-[#363E48] bg-[#0D1117] shadow-[0_28px_70px_-30px_rgba(10,14,18,.55)] overflow-hidden"
+      className="rounded-xl border border-[#343B50] bg-[#0A0C12] shadow-[0_32px_80px_-28px_rgba(5,7,10,.7)] overflow-hidden"
       role="img"
       aria-label="Demonstration: a paste of customer records into ChatGPT is classified as CUSTOMER_PII with 0.94 confidence, matched against policy AI-PROTECTION-001, and blocked in 14 milliseconds."
     >
       {/* chrome */}
-      <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-[#363E48] bg-[#010409]">
+      <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-[#343B50] bg-[#05060A]">
         <div className="flex items-center gap-2 min-w-0">
-          <Mark size={14} tone="#6CB0FF" />
-          <span className="mono text-[10px] tracking-[0.11em] uppercase text-[#8B96A3] truncate">
+          <span className="w-5 h-5 rounded-[5px] flex items-center justify-center flex-none bg-[rgba(76,142,255,.14)] ring-1 ring-inset ring-[rgba(76,142,255,.32)]">
+            <Mark size={12} tone="#4C8EFF" />
+          </span>
+          <span className="mono text-[10px] tracking-[0.11em] uppercase text-[#7E8798] truncate">
             securedesk · extension
           </span>
         </div>
         <div className="flex items-center gap-1.5 flex-none">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#6CB0FF] animate-pulse-dot" />
-          <span className="mono text-[10px] tracking-[0.09em] uppercase text-[#6CB0FF]">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#4C8EFF] animate-pulse-dot" />
+          <span className="mono text-[10px] tracking-[0.09em] uppercase text-[#4C8EFF]">
             active
           </span>
         </div>
@@ -76,21 +78,21 @@ function InterceptPanel() {
                 opacity: on ? 1 : 0.18,
               }}
             >
-              <span className="mono text-[10.5px] text-[#8B96A3] pt-px tabular-nums flex-none w-[42px]">
+              <span className="mono text-[10.5px] text-[#7E8798] pt-px tabular-nums flex-none w-[42px]">
                 {row.t}
               </span>
               <span
                 className="mt-[7px] w-1 h-1 rounded-full flex-none transition-colors duration-300"
-                style={{ background: on ? (last ? "#FF8078" : "#6CB0FF") : "#8B96A3" }}
+                style={{ background: on ? (last ? "#FF8078" : "#4C8EFF") : "#7E8798" }}
               />
               <div className="min-w-0 flex-1">
                 <div
                   className="mono text-[11px] tracking-[0.06em] uppercase transition-colors duration-300"
-                  style={{ color: on ? (last ? "#FF8078" : "#C9D1D9") : "#8B96A3" }}
+                  style={{ color: on ? (last ? "#FF8078" : "#C6CCD9") : "#7E8798" }}
                 >
                   {row.label}
                 </div>
-                <div className="text-[12.5px] text-[#A8B3BF] mt-0.5 truncate">
+                <div className="text-[12.5px] text-[#99A1B3] mt-0.5 truncate">
                   {row.detail}
                 </div>
               </div>
@@ -100,26 +102,26 @@ function InterceptPanel() {
       </div>
 
       {/* what the employee sees */}
-      <div className="border-t border-[#363E48] p-3.5">
+      <div className="border-t border-[#343B50] p-3.5">
         <div
           className="rounded-md border p-3.5 transition-all duration-500"
           style={{
-            borderColor: done ? "rgba(242,122,110,.34)" : "#363E48",
-            background: done ? "rgba(242,122,110,.07)" : "#010409",
+            borderColor: done ? "rgba(242,122,110,.34)" : "#343B50",
+            background: done ? "rgba(242,122,110,.07)" : "#05060A",
             opacity: done ? 1 : 0.3,
           }}
         >
           <div className="flex items-start gap-2.5">
-            <Mark size={15} tone={done ? "#FF8078" : "#8B96A3"} />
+            <Mark size={15} tone={done ? "#FF8078" : "#7E8798"} />
             <div className="min-w-0">
-              <p className="text-[13px] font-medium text-[#E6EDF3] leading-snug">
+              <p className="text-[13px] font-medium text-[#EEF1F7] leading-snug">
                 SecureDesk blocked this paste
               </p>
-              <p className="text-[12px] text-[#A8B3BF] mt-1 leading-relaxed">
+              <p className="text-[12px] text-[#99A1B3] mt-1 leading-relaxed">
                 It looks like customer personal information. Your organisation's
                 policy doesn't allow that in external AI tools.
               </p>
-              <p className="mono text-[10px] tracking-[0.08em] uppercase text-[#8B96A3] mt-2">
+              <p className="mono text-[10px] tracking-[0.08em] uppercase text-[#7E8798] mt-2">
                 policy AI-PROTECTION-001 · contact security to request an exception
               </p>
             </div>
@@ -156,12 +158,6 @@ const NEVER = [
   "Personal accounts, personal devices, or off-hours activity",
 ];
 
-const PLANS = [
-  { name: "Starter",    price: "₹2,999",  unit: "/month", seats: "Up to 10 seats",   pts: ["Browser extension", "Deterministic detection", "Policy engine", "Event dashboard"], cta: "Start free" },
-  { name: "Business",   price: "₹8,999",  unit: "/month", seats: "Up to 100 seats",  pts: ["Everything in Starter", "Incident workflow", "Custom detection patterns", "Audit log export"], cta: "Start free", featured: true },
-  { name: "Enterprise", price: "Custom",  unit: "",       seats: "Unlimited seats",  pts: ["Everything in Business", "SSO and directory sync", "Managed deployment", "Priority support"], cta: "Talk to us" },
-];
-
 export default function LandingPage() {
   useMarketingSurface();
 
@@ -178,7 +174,6 @@ export default function LandingPage() {
             <a href="#how" className="hover:text-slate-900 transition-colors">How it works</a>
             <a href="#coverage" className="hover:text-slate-900 transition-colors">Coverage</a>
             <a href="#privacy" className="hover:text-slate-900 transition-colors">Privacy</a>
-            <Link to="/pricing" className="hover:text-slate-900 transition-colors">Pricing</Link>
           </nav>
 
           <div className="flex items-center gap-2">
@@ -238,7 +233,16 @@ export default function LandingPage() {
             </div>
 
             {/* the demo */}
-            <div className="lg:pl-2">
+            <div className="lg:pl-2 relative">
+              {/* ambient glow so the dark panel reads as lit, not a flat
+                  cutout dropped onto the white hero */}
+              <div
+                className="absolute -inset-6 -z-10 opacity-60 blur-3xl pointer-events-none"
+                style={{
+                  background:
+                    "radial-gradient(60% 60% at 50% 38%, rgba(76,142,255,.22), transparent 72%)",
+                }}
+              />
               <InterceptPanel />
               <p className="mt-3 mono text-[10.5px] tracking-[0.07em] uppercase text-slate-500 text-center">
                 Illustrative trace — detection and policy run on-device
@@ -391,62 +395,11 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Pricing ─────────────────────────────────────────────── */}
-      <section className="border-b border-paper-line bg-paper-raised">
-        <div className="max-w-shell mx-auto px-6 lg:px-8 py-16 lg:py-24">
-          <div className="max-w-narrow mb-12">
-            <p className="eyebrow mb-4">Pricing</p>
-            <h2 className="text-display-md text-slate-950">Priced for the companies that actually have this problem.</h2>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-5">
-            {PLANS.map((p) => (
-              <div
-                key={p.name}
-                className={`rounded-lg border p-6 flex flex-col ${
-                  p.featured
-                    ? "border-slate-900 bg-paper shadow-panel"
-                    : "border-paper-line bg-paper"
-                }`}
-              >
-                <div className="flex items-baseline justify-between mb-1">
-                  <h3 className="text-[14px] font-semibold text-slate-900">{p.name}</h3>
-                  {p.featured && <span className="tag tag-accent">Most chosen</span>}
-                </div>
-                <p className="mono text-[11px] tracking-[0.07em] uppercase text-slate-500 mb-5">{p.seats}</p>
-                <div className="flex items-baseline gap-1 mb-6">
-                  <span className="text-[30px] font-semibold tracking-[-0.03em] text-slate-950 tabular-nums">{p.price}</span>
-                  <span className="text-[13px] text-slate-500">{p.unit}</span>
-                </div>
-                <ul className="space-y-2.5 mb-7 flex-1">
-                  {p.pts.map((pt) => (
-                    <li key={pt} className="flex items-start gap-2.5">
-                      <Check className="w-3.5 h-3.5 text-signal-ink mt-0.5 flex-none" strokeWidth={2.5} />
-                      <span className="text-[13.5px] text-slate-700 leading-snug">{pt}</span>
-                    </li>
-                  ))}
-                </ul>
-                <Link
-                  to={p.name === "Enterprise" ? "/pricing" : "/register"}
-                  className={`btn w-full ${
-                    p.featured
-                      ? "!bg-slate-900 !text-paper hover:!bg-slate-800"
-                      : "btn-secondary !border-paper-line2 !text-slate-800 hover:!bg-paper-sunk"
-                  }`}
-                >
-                  {p.cta}
-                </Link>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ── CTA ─────────────────────────────────────────────────── */}
       <section className="tokens-dark bg-ink text-slate-100">
         <div className="max-w-shell mx-auto px-6 lg:px-8 py-20 lg:py-28">
           <div className="max-w-narrow">
-            <p className="eyebrow eyebrow-accent mb-5" style={{ color: "#6CB0FF" }}>
+            <p className="eyebrow eyebrow-accent mb-5" style={{ color: "#4C8EFF" }}>
               Early access
             </p>
             <h2 className="text-display-lg text-white">
@@ -458,13 +411,13 @@ export default function LandingPage() {
               Then decide what to enforce.
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-3">
-              <Link to="/register" className="btn !bg-signal-bright !text-[#06121F] hover:!bg-[#8CC2FF] !px-5 !py-2.5">
+              <Link to="/register" className="btn !bg-signal-bright !text-[#06121F] hover:!bg-[#7FADFF] !px-5 !py-2.5">
                 Create your workspace
                 <ArrowRight className="w-4 h-4" />
               </Link>
               <a
                 href="mailto:sanskar@securedesk.in"
-                className="btn !border-[#4A5462] !text-slate-200 border hover:!bg-[#161B22] !px-5 !py-2.5"
+                className="btn !border-[#454D63] !text-slate-200 border hover:!bg-[#12151F] !px-5 !py-2.5"
               >
                 Talk to the team
               </a>
@@ -474,19 +427,18 @@ export default function LandingPage() {
       </section>
 
       {/* ── Footer ──────────────────────────────────────────────── */}
-      <footer className="tokens-dark bg-ink border-t border-[#363E48] text-slate-400">
+      <footer className="tokens-dark bg-ink border-t border-[#343B50] text-slate-400">
         <div className="max-w-shell mx-auto px-6 lg:px-8 py-10">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
             <div className="text-slate-300">
               <Wordmark size={19} />
             </div>
             <nav className="flex flex-wrap items-center gap-x-7 gap-y-2 text-[13px]">
-              <Link to="/pricing" className="hover:text-slate-200 transition-colors">Pricing</Link>
               <Link to="/login" className="hover:text-slate-200 transition-colors">Sign in</Link>
               <a href="mailto:sanskar@securedesk.in" className="hover:text-slate-200 transition-colors">Contact</a>
             </nav>
           </div>
-          <div className="rule !bg-[#363E48] my-7" />
+          <div className="rule !bg-[#343B50] my-7" />
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <p className="mono text-[11px] tracking-[0.06em] text-slate-400">
               © {new Date().getFullYear()} SecureDesk · securedesk.in

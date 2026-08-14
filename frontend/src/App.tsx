@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider } from "./context/AuthContext";
+import { SidebarProvider } from "./context/SidebarContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 import LandingPage          from "./pages/LandingPage";
@@ -32,6 +33,7 @@ import PricingPage          from "./pages/PricingPage";
 export default function App() {
   return (
     <AuthProvider>
+      <SidebarProvider>
       <BrowserRouter>
         <Toaster position="top-right" toastOptions={{
           style: { background: "#1f2937", color: "#f9fafb", border: "1px solid #374151" },
@@ -78,6 +80,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
+      </SidebarProvider>
     </AuthProvider>
   );
 }

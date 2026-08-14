@@ -8,42 +8,42 @@ export default {
         // Mirrors the CSS custom properties in src/index.css. Both are
         // verified by `npm run check:contrast` — change them together.
         ink: {
-          DEFAULT: "#0D1117",   // console ground
-          raised:  "#161B22",   // panels sitting on the ground
-          high:    "#1C2129",   // raised panel
-          inset:   "#010409",   // wells, inputs, code
-          line:    "#363E48",   // hairline dividers — visible, 1.75:1
-          line2:   "#4A5462",   // emphasized dividers
+          DEFAULT: "#0A0C12",   // console ground — blue-violet tinted, not neutral gray
+          raised:  "#12151F",   // panels sitting on the ground
+          high:    "#191D2A",   // raised panel
+          inset:   "#05060A",   // wells, inputs, code
+          line:    "#343B50",   // hairline dividers — visible, 1.76:1
+          line2:   "#454D63",   // emphasized dividers
         },
         paper: {
           DEFAULT: "#FFFFFF",   // marketing ground — clean white
-          raised:  "#F4F6F9",   // alternating band, faint cool tint
-          sunk:    "#EDF1F5",
-          line:    "#BFC9D6",
-          line2:   "#A9B4C2",
+          raised:  "#F3F5F9",   // alternating band, faint cool tint
+          sunk:    "#E7ECF2",
+          line:    "#BBC5D3",
+          line2:   "#A3AEBE",
         },
         // ── Neutral ramp ─────────────────────────────────────────
         // 500 and darker are safe on light grounds (>=4.5:1 on white).
         // 400 and lighter are for DARK grounds only.
         slate: {
-          950: "#0D1117",
+          950: "#0A0C12",
           900: "#131A24",
           800: "#1C2530",
           700: "#2C3846",
           600: "#4A5768",   // 7.36:1 on white
           500: "#5C6979",   // 5.60:1 on white — lightest safe on paper
-          400: "#8B96A3",   // 6.30:1 on ink  — lightest safe on dark
+          400: "#8B96A3",   // 6.51:1 on ink  — lightest safe on dark
           300: "#B3BECD",
           200: "#D3DAE4",
           100: "#E8ECF2",
           50:  "#F4F6F9",
         },
-        // ── Brand accent — azure ─────────────────────────────────
+        // ── Brand accent — electric blue ──────────────────────────
         signal: {
           DEFAULT: "#1657C4",
           ink:     "#0F469F",   // on light grounds
-          bright:  "#6CB0FF",   // on dark grounds
-          dim:     "#8CC2FF",
+          bright:  "#4C8EFF",   // on dark grounds
+          dim:     "#7FADFF",
           wash:    "#E8F0FC",
           shade:   "#0B1A2E",
         },

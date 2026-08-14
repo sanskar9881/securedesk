@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useSidebar } from "../context/SidebarContext";
 import api from "../api/axios";
 import { User, Settings, Globe, ShieldCheck, LogOut, ChevronDown, Bell, Sun, Moon } from "lucide-react";
 
@@ -216,9 +217,12 @@ export default function Header({ title, subtitle, actions }: Props) {
 
 /** Standard page frame for every console screen. */
 export function Console({ children }: { children: React.ReactNode }) {
+  const { collapsed } = useSidebar();
   return (
     <main
-      className="ml-0 lg:ml-64 min-w-0 max-w-full overflow-x-hidden min-h-screen px-4 md:px-8 pb-16"
+      className={`ml-0 min-w-0 max-w-full overflow-x-hidden min-h-screen px-4 md:px-8 pb-16 transition-[margin] duration-200 ease-swift ${
+        collapsed ? "lg:ml-[72px]" : "lg:ml-64"
+      }`}
       style={{ background: "var(--surface-0)" }}
     >
       {children}

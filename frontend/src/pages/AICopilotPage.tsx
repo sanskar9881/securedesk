@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import Navbar from "../components/Navbar";
+import { useSidebar } from "../context/SidebarContext";
 import api from "../api/axios";
 import toast from "react-hot-toast";
 import ReactMarkdown from "react-markdown";
@@ -17,6 +18,7 @@ const EXAMPLES = [
 ];
 
 export default function AICopilotPage() {
+  const { collapsed } = useSidebar();
   const [q, setQ]             = useState("");
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<Q[]>([]);
@@ -43,7 +45,7 @@ export default function AICopilotPage() {
   return (
     <div className="flex">
       <Navbar/>
-      <main className="ml-0 lg:ml-64 flex-1 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300">
+      <main className={`ml-0 flex-1 min-w-0 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300 ${collapsed ? "lg:ml-[72px]" : "lg:ml-64"}`}>
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-white">AI Copilot</h1>
           <p className="text-gray-500 text-sm mt-1">Ask anything about your security data in natural language</p>

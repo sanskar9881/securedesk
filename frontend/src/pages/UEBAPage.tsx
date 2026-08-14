@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Navbar from "../components/Navbar";
+import { useSidebar } from "../context/SidebarContext";
 import api from "../api/axios";
 import { Brain, AlertTriangle, Users, Activity, TrendingUp, Loader2, RefreshCw } from "lucide-react";
 
@@ -14,6 +15,7 @@ interface Alert {
 }
 
 export default function UEBAPage() {
+  const { collapsed } = useSidebar();
   const [ueba, setUeba]       = useState<UEBAData | null>(null);
   const [alerts, setAlerts]   = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,7 +45,7 @@ export default function UEBAPage() {
   return (
     <div className="flex">
       <Navbar />
-      <main className="ml-0 lg:ml-64 flex-1 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300">
+      <main className={`ml-0 flex-1 min-w-0 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300 ${collapsed ? "lg:ml-[72px]" : "lg:ml-64"}`}>
         <div className="mb-8 flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">Behavior Analytics (UEBA)</h1>

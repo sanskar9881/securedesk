@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Navbar from "../components/Navbar";
+import { useSidebar } from "../context/SidebarContext";
 import api from "../api/axios";
 import { MessageCircle, AlertTriangle, RefreshCw, Loader2, Shield } from "lucide-react";
 
@@ -14,6 +15,7 @@ const riskCls = (r: string) =>
   "bg-green-900/40 text-green-400 border border-green-800/40";
 
 export default function WhatsAppLogsPage() {
+  const { collapsed } = useSidebar();
   const [logs, setLogs]       = useState<WALog[]>([]);
   const [stats, setStats]     = useState({ total_shares: 0, flagged: 0, high_risk: 0 });
   const [loading, setLoading] = useState(true);
@@ -38,7 +40,7 @@ export default function WhatsAppLogsPage() {
   return (
     <div className="flex">
       <Navbar />
-      <main className="ml-64 flex-1 min-h-screen bg-gray-950 p-8">
+      <main className={`ml-0 min-w-0 flex-1 min-h-screen bg-gray-950 p-8 ${collapsed ? "lg:ml-[72px]" : "lg:ml-64"}`}>
         <div className="mb-8 flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white flex items-center gap-3">

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Navbar from "../components/Navbar";
+import { useSidebar } from "../context/SidebarContext";
 import Header from "../components/Header";
 import { ChevronDown, ShieldCheck } from "lucide-react";
 
@@ -47,12 +48,13 @@ const FAQ = [
 ];
 
 export default function PrivacyPage() {
+  const { collapsed } = useSidebar();
   const [open, setOpen] = useState<number | null>(null);
 
   return (
     <div className="flex">
       <Navbar />
-      <main className="ml-64 flex-1 min-h-screen bg-gray-950 p-8">
+      <main className={`ml-0 min-w-0 flex-1 min-h-screen bg-gray-950 p-8 ${collapsed ? "lg:ml-[72px]" : "lg:ml-64"}`}>
         <Header title="Privacy Center" subtitle="Your data privacy questions answered" />
 
         <div className="max-w-2xl">

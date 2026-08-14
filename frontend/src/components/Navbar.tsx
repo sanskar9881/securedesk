@@ -1,11 +1,13 @@
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useSidebar } from "../context/SidebarContext";
 import Mark from "./Mark";
 import {
   LayoutDashboard, Send, LogOut, Users, History, ShieldAlert,
   MessageSquare, ScanLine, Brain, Activity, Database, FileCheck,
   TrendingUp, Building2, MessageCircle, Menu, X, Settings,
+  PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 
 type Item = { to: string; icon: React.ReactNode; label: string };
@@ -15,6 +17,7 @@ const ic = "w-[15px] h-[15px]";
 
 export default function Navbar() {
   const { user, logout } = useAuth();
+  const { collapsed, toggle } = useSidebar();
   const navigate = useNavigate();
   const loc = useLocation();
   const [open, setOpen] = useState(false);
@@ -30,6 +33,17 @@ export default function Navbar() {
   const isAdmin = user?.role === "admin";
   const isManager = user?.role === "manager";
   const isStaff = isAdmin || isManager;
+  const home = isStaff ? "/admin" : "/dashboard";
+
+  // Tapping the mark while already on the home screen re-fetches everything
+  // from a clean slate, same as a browser reload — rather than doing nothing,
+  // which is what a same-route Link click normally does.
+  const onBrandClick = (e: React.MouseEvent) => {
+    if (loc.pathname === home) {
+      e.preventDefault();
+      window.location.reload();
+    }
+  };
 
   const groups: Group[] = isStaff
     ? [
@@ -115,19 +129,25 @@ export default function Navbar() {
       )}
 
       <div
-        className={`fixed left-0 top-0 h-screen w-64 z-[70] flex flex-col transition-transform duration-200 ease-swift
+        className={`fixed left-0 top-0 h-screen z-[70] flex flex-col transition-all duration-200 ease-swift
+          ${collapsed ? "w-64 lg:w-[72px]" : "w-64"}
           ${open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
         style={{ background: "var(--surface-1)", borderRight: "1px solid var(--line-1)" }}
       >
         {/* brand */}
         <div
-          className="h-14 px-4 flex items-center justify-between flex-none"
+          className={`h-14 flex items-center flex-none ${collapsed ? "lg:justify-center lg:px-0 px-4 justify-between" : "px-4 justify-between"}`}
           style={{ borderBottom: "1px solid var(--line-1)" }}
         >
-          <Link to={isStaff ? "/admin" : "/dashboard"} className="flex items-center gap-2.5 min-w-0">
+          <Link
+            to={home}
+            onClick={onBrandClick}
+            title={loc.pathname === home ? "Reload" : "Go to overview"}
+            className={`flex items-center gap-2.5 min-w-0 hover:opacity-75 transition-opacity ${collapsed ? "lg:justify-center" : ""}`}
+          >
             <Mark size={19} tone="var(--accent)" />
             <span
-              className="font-semibold text-[14.5px] tracking-[-0.02em] truncate"
+              className={`font-semibold text-[14.5px] tracking-[-0.02em] truncate ${collapsed ? "lg:hidden" : ""}`}
               style={{ color: "var(--text-1)" }}
             >
               SecureDesk
@@ -143,13 +163,40 @@ export default function Navbar() {
           </button>
         </div>
 
+        {/* collapse toggle — desktop rail only; the mobile drawer always
+            shows the full list since screen space isn't the constraint there */}
+        <button
+          onClick={toggle}
+          aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+          title={collapsed ? "Expand navigation" : "Collapse navigation"}
+          className={`hidden lg:flex items-center gap-2 flex-none mx-2.5 mt-2.5 px-2.5 py-[7px] rounded-sm text-[12px] transition-colors ${collapsed ? "lg:justify-center" : ""}`}
+          style={{ color: "var(--text-4)" }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "var(--surface-2)";
+            e.currentTarget.style.color = "var(--text-2)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.color = "var(--text-4)";
+          }}
+        >
+          {collapsed ? <PanelLeftOpen className="w-[15px] h-[15px]" /> : <PanelLeftClose className="w-[15px] h-[15px]" />}
+          {!collapsed && <span>Collapse</span>}
+        </button>
+
         {/* nav */}
-        <nav className="flex-1 overflow-y-auto no-scrollbar py-4 px-2.5">
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar py-3 px-2.5">
           {groups.map((g) => (
             <div key={g.title} className="mb-5">
-              <p className="eyebrow px-2.5 mb-1.5" style={{ fontSize: "0.5625rem" }}>
+              <p
+                className={`eyebrow px-2.5 mb-1.5 ${collapsed ? "lg:hidden" : ""}`}
+                style={{ fontSize: "0.5625rem" }}
+              >
                 {g.title}
               </p>
+              {collapsed && (
+                <div className="hidden lg:block h-px mx-2.5 mb-1.5" style={{ background: "var(--line-1)" }} />
+              )}
               <div className="space-y-px">
                 {g.items.map((it) => {
                   const active = loc.pathname === it.to;
@@ -158,7 +205,8 @@ export default function Navbar() {
                       key={it.to}
                       to={it.to}
                       aria-current={active ? "page" : undefined}
-                      className="relative flex items-center gap-2.5 px-2.5 py-[7px] rounded-sm text-[13.5px] transition-colors duration-150"
+                      title={collapsed ? it.label : undefined}
+                      className={`relative flex items-center gap-2.5 px-2.5 py-[7px] rounded-sm text-[13.5px] transition-colors duration-150 ${collapsed ? "lg:justify-center" : ""}`}
                       style={{
                         background: active ? "var(--accent-wash)" : "transparent",
                         color: active ? "var(--accent)" : "var(--text-3)",
@@ -179,12 +227,12 @@ export default function Navbar() {
                     >
                       {active && (
                         <span
-                          className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-[15px] rounded-r"
+                          className={`absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-[15px] rounded-r ${collapsed ? "lg:hidden" : ""}`}
                           style={{ background: "var(--accent)" }}
                         />
                       )}
                       <span className="flex-none opacity-90">{it.icon}</span>
-                      <span className="truncate">{it.label}</span>
+                      <span className={`truncate ${collapsed ? "lg:hidden" : ""}`}>{it.label}</span>
                     </Link>
                   );
                 })}
@@ -197,7 +245,8 @@ export default function Navbar() {
         <div className="flex-none p-2.5" style={{ borderTop: "1px solid var(--line-1)" }}>
           <Link
             to="/profile"
-            className="flex items-center gap-2.5 px-2 py-2 rounded-sm transition-colors duration-150"
+            title={collapsed ? user?.name : undefined}
+            className={`flex items-center gap-2.5 px-2 py-2 rounded-sm transition-colors duration-150 ${collapsed ? "lg:justify-center" : ""}`}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-2)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
           >
@@ -207,7 +256,7 @@ export default function Navbar() {
             >
               {user?.name?.[0]?.toUpperCase() ?? "?"}
             </span>
-            <span className="min-w-0 flex-1">
+            <span className={`min-w-0 flex-1 ${collapsed ? "lg:hidden" : ""}`}>
               <span className="block text-[13px] truncate" style={{ color: "var(--text-1)" }}>
                 {user?.name}
               </span>
@@ -217,10 +266,11 @@ export default function Navbar() {
             </span>
           </Link>
 
-          <div className="flex gap-px mt-1">
+          <div className={`flex gap-px mt-1 ${collapsed ? "lg:flex-col" : ""}`}>
             <Link
               to="/settings"
-              className="flex-1 flex items-center justify-center gap-1.5 py-[7px] rounded-sm text-[12px] transition-colors"
+              title={collapsed ? "Settings" : undefined}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-[7px] rounded-sm text-[12px] transition-colors ${collapsed ? "lg:flex-none" : ""}`}
               style={{ color: "var(--text-3)" }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.background = "var(--surface-2)";
@@ -232,14 +282,15 @@ export default function Navbar() {
               }}
             >
               <Settings className="w-3.5 h-3.5" />
-              Settings
+              <span className={collapsed ? "lg:hidden" : ""}>Settings</span>
             </Link>
             <button
               onClick={() => {
                 logout();
                 navigate("/login");
               }}
-              className="flex-1 flex items-center justify-center gap-1.5 py-[7px] rounded-sm text-[12px] transition-colors"
+              title={collapsed ? "Sign out" : undefined}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-[7px] rounded-sm text-[12px] transition-colors ${collapsed ? "lg:flex-none" : ""}`}
               style={{ color: "var(--text-3)" }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.background = "var(--sev-block-wash)";
@@ -251,7 +302,7 @@ export default function Navbar() {
               }}
             >
               <LogOut className="w-3.5 h-3.5" />
-              Sign out
+              <span className={collapsed ? "lg:hidden" : ""}>Sign out</span>
             </button>
           </div>
         </div>

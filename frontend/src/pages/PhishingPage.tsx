@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Navbar from "../components/Navbar";
+import { useSidebar } from "../context/SidebarContext";
 import Header from "../components/Header";
 import api from "../api/axios";
 import toast from "react-hot-toast";
@@ -55,6 +56,7 @@ PayPal Security Team`,
 };
 
 export default function PhishingPage() {
+  const { collapsed } = useSidebar();
   const [content, setContent] = useState("");
   const [sender, setSender] = useState("");
   const [subject, setSubject] = useState("");
@@ -121,7 +123,7 @@ export default function PhishingPage() {
   return (
     <div className="flex">
       <Navbar />
-      <main className="ml-0 lg:ml-64 flex-1 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300">
+      <main className={`ml-0 flex-1 min-w-0 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300 ${collapsed ? "lg:ml-[72px]" : "lg:ml-64"}`}>
         <Header title="Phishing Detector" subtitle="Instantly check any email or message for threats" />
 
         {/* Email Connect Banner */}

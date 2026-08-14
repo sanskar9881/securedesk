@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import { useSidebar } from "../context/SidebarContext";
 import Header from "../components/Header";
 import api from "../api/axios";
 import toast from "react-hot-toast";
@@ -19,6 +20,7 @@ const LANGUAGES = [
 ];
 
 export default function LanguagePage() {
+  const { collapsed } = useSidebar();
   const { language: currentLang, setLanguage, t } = useAuth();
   const [selected, setSelected] = useState(currentLang);
   const [saving, setSaving] = useState(false);
@@ -56,7 +58,7 @@ export default function LanguagePage() {
   return (
     <div className="flex">
       <Navbar />
-      <main className="ml-64 flex-1 min-h-screen bg-gray-950 p-8">
+      <main className={`ml-0 min-w-0 flex-1 min-h-screen bg-gray-950 p-8 ${collapsed ? "lg:ml-[72px]" : "lg:ml-64"}`}>
         <Header title={t("language")} subtitle="Choose your preferred language — changes apply immediately" />
 
         <div className="max-w-md">

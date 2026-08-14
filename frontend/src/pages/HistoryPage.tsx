@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Navbar from "../components/Navbar";
+import { useSidebar } from "../context/SidebarContext";
 import api from "../api/axios";
 import { FileText } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -18,6 +19,7 @@ interface Transaction {
 }
 
 export default function HistoryPage() {
+  const { collapsed } = useSidebar();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -40,7 +42,7 @@ export default function HistoryPage() {
   return (
     <div className="flex">
       <Navbar />
-      <main className="ml-64 flex-1 min-h-screen bg-gray-950 p-8">
+      <main className={`ml-0 min-w-0 flex-1 min-h-screen bg-gray-950 p-8 ${collapsed ? "lg:ml-[72px]" : "lg:ml-64"}`}>
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-white">My History</h1>
           <p className="text-gray-500 text-sm mt-1">All your file transactions</p>

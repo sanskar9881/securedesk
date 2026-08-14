@@ -1,11 +1,13 @@
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
+import { useSidebar } from "../context/SidebarContext";
 import Header from "../components/Header";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
 import { User, Globe, ShieldCheck, Moon, Sun, ChevronRight, Bell, Lock, Monitor } from "lucide-react";
 
 export default function SettingsPage() {
+  const { collapsed } = useSidebar();
   const navigate = useNavigate();
   const { darkMode, toggleDarkMode, language, t } = useAuth();
 
@@ -78,7 +80,7 @@ export default function SettingsPage() {
   return (
     <div className="flex">
       <Navbar />
-      <main className="ml-64 flex-1 min-h-screen bg-gray-950 p-8">
+      <main className={`ml-0 min-w-0 flex-1 min-h-screen bg-gray-950 p-8 ${collapsed ? "lg:ml-[72px]" : "lg:ml-64"}`}>
         <Header title={t("settings")} subtitle="Configure your SecureDesk experience" />
 
         <div className="max-w-lg space-y-5 animate-fadeInUp">

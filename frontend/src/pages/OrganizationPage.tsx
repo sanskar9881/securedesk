@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Navbar from "../components/Navbar";
+import { useSidebar } from "../context/SidebarContext";
 import api from "../api/axios";
 import { apiErrorMessage } from "../api/errors";
 import toast from "react-hot-toast";
@@ -9,6 +10,7 @@ interface Org { _id:string; name:string; domain:string; industry:string; size:st
 interface Member { _id:string; name:string; role:string; email:string; created_at:string; }
 
 export default function OrganizationPage() {
+  const { collapsed } = useSidebar();
   const [org, setOrg]           = useState<Org | null>(null);
   const [members, setMembers]   = useState<Member[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -72,7 +74,7 @@ export default function OrganizationPage() {
   return (
     <div className="flex">
       <Navbar />
-      <main className="ml-64 flex-1 min-h-screen bg-gray-950 p-8">
+      <main className={`ml-0 min-w-0 flex-1 min-h-screen bg-gray-950 p-8 ${collapsed ? "lg:ml-[72px]" : "lg:ml-64"}`}>
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-white">Organization</h1>
           <p className="text-gray-500 text-sm mt-1">Manage your company and team members</p>

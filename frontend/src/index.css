@@ -15,22 +15,31 @@
      land on; dividers hold >= 1.5:1 so panel edges are actually visible.
      ─────────────────────────────────────────────────────────────── */
   :root {
-    --surface-0: #0D1117;   /* app ground        */
-    --surface-1: #161B22;   /* panel             */
-    --surface-2: #1C2129;   /* panel, raised     */
-    --surface-in:#010409;   /* inset / input     */
-    --line-1:    #363E48;   /* 1.75:1 on ground — a real edge */
-    --line-2:    #4A5462;
+    /* An "ops center" ink, not a neutral gray-black — every ground carries a
+       faint blue-violet tint (hue ~226°) so the console reads as a considered
+       instrument rather than a generic dark-mode default. Elevation steps are
+       spaced further apart than a typical dark theme so panels visibly lift
+       off the ground instead of blurring into it. */
+    --surface-0: #0A0C12;   /* app ground        */
+    --surface-1: #12151F;   /* panel             */
+    --surface-2: #191D2A;   /* panel, raised     */
+    --surface-in:#05060A;   /* inset / input     */
+    --line-1:    #343B50;   /* 1.76:1 on ground — a real edge */
+    --line-2:    #454D63;
 
-    --text-1:    #E6EDF3;   /* primary   — not pure white, avoids halation */
-    --text-2:    #C9D1D9;   /* secondary */
-    --text-3:    #A8B3BF;   /* tertiary  */
-    --text-4:    #8B96A3;   /* labels / captions — 5.38:1 worst case */
+    --text-1:    #EEF1F7;   /* primary   — not pure white, avoids halation */
+    --text-2:    #C6CCD9;   /* secondary */
+    --text-3:    #99A1B3;   /* tertiary  */
+    --text-4:    #7E8798;   /* labels / captions — 5.04:1 worst case */
 
-    --accent:      #6CB0FF; /* azure — the enterprise-security register */
-    --accent-quiet:#8CC2FF;
-    --accent-wash: rgba(108, 176, 255, 0.13);
-    --accent-line: rgba(108, 176, 255, 0.34);
+    /* Electric blue, more saturated than a muted azure — confident rather
+       than corporate-pastel. Paired with --accent-glow for the soft lit edge
+       on primary actions and the active nav item. */
+    --accent:      #4C8EFF;
+    --accent-quiet:#7FADFF;
+    --accent-wash: rgba(76, 142, 255, 0.14);
+    --accent-line: rgba(76, 142, 255, 0.38);
+    --accent-glow: rgba(76, 142, 255, 0.45);
 
     /* Severity is an ESCALATION scale, not a traffic light. LOW is baseline
        noise and stays neutral so only genuine escalation draws the eye.
@@ -45,8 +54,12 @@
     --sev-warn-wash:  rgba(240, 184, 73, 0.16);
     --sev-allow-wash: rgba(139, 150, 163, 0.15);
 
-    --shadow-panel: 0 1px 0 rgba(255,255,255,.04) inset,
-                    0 16px 40px -20px rgba(0,0,0,.85);
+    --shadow-panel: 0 1px 0 rgba(255,255,255,.05) inset,
+                    0 20px 48px -22px rgba(0,0,0,.9);
+    /* The premium "lit" edge — used sparingly: primary buttons, the active
+       nav item, focused controls. Not a decoration on every panel. */
+    --shadow-glow:  0 0 0 1px var(--accent-line),
+                    0 10px 28px -10px var(--accent-glow);
     color-scheme: dark;
   }
 
@@ -58,25 +71,30 @@
      ─────────────────────────────────────────────────────────────── */
   .light-mode,
   .tokens-light {
-    --surface-0: #F4F6F9;
+    /* Elevation steps pulled further apart than the old set — surface-2 was
+       0.6% off white and never read as a distinct layer. Same hue direction
+       as the dark ground (cool blue-slate) so the two themes feel like one
+       product, not a light theme bolted onto a dark one. */
+    --surface-0: #F3F5F9;
     --surface-1: #FFFFFF;
-    --surface-2: #FAFBFD;
-    --surface-in:#EDF1F5;
-    --line-1:    #BFC9D6;   /* 1.55:1 on ground, 1.68:1 on white */
-    --line-2:    #A9B4C2;
+    --surface-2: #EEF1F6;
+    --surface-in:#E7ECF2;
+    --line-1:    #BBC5D3;   /* 1.60:1 on ground, 1.74:1 on white */
+    --line-2:    #A3AEBE;
 
     --text-1:    #0E1621;
     --text-2:    #2C3846;
     --text-3:    #4A5768;
-    --text-4:    #5C6979;   /* 5.17:1 worst case — was 3.91 and unreadable */
+    --text-4:    #5C6979;   /* 4.71:1 worst case */
 
     --accent:      #1657C4;
     --accent-quiet:#0F469F;
     --accent-wash: rgba(22, 87, 196, 0.09);
     --accent-line: rgba(22, 87, 196, 0.26);
+    --accent-glow: rgba(22, 87, 196, 0.22);
 
     --sev-block: #A11043;   /* crimson — separates from amber under CVD */
-    --sev-warn:  #96600A;
+    --sev-warn:  #8A5900;   /* 4.71:1 worst case — was 4.45 on the inset well */
     --sev-allow: #5C6979;   /* neutral baseline */
     --ok:        #177530;
     --sev-block-wash: rgba(161, 16, 67, 0.09);
@@ -85,6 +103,8 @@
 
     --shadow-panel: 0 1px 2px rgba(14,22,33,.06),
                     0 12px 32px -16px rgba(14,22,33,.18);
+    --shadow-glow:  0 0 0 1px var(--accent-line),
+                    0 10px 24px -12px var(--accent-glow);
     color-scheme: light;
   }
 
@@ -95,22 +115,23 @@
      near-black text on a near-black ground. Symmetric with `.tokens-light`.
      ─────────────────────────────────────────────────────────────── */
   .tokens-dark {
-    --surface-0: #0D1117;
-    --surface-1: #161B22;
-    --surface-2: #1C2129;
-    --surface-in:#010409;
-    --line-1:    #363E48;
-    --line-2:    #4A5462;
+    --surface-0: #0A0C12;
+    --surface-1: #12151F;
+    --surface-2: #191D2A;
+    --surface-in:#05060A;
+    --line-1:    #343B50;
+    --line-2:    #454D63;
 
-    --text-1:    #E6EDF3;
-    --text-2:    #C9D1D9;
-    --text-3:    #A8B3BF;
-    --text-4:    #8B96A3;
+    --text-1:    #EEF1F7;
+    --text-2:    #C6CCD9;
+    --text-3:    #99A1B3;
+    --text-4:    #7E8798;
 
-    --accent:      #6CB0FF;
-    --accent-quiet:#8CC2FF;
-    --accent-wash: rgba(108, 176, 255, 0.13);
-    --accent-line: rgba(108, 176, 255, 0.34);
+    --accent:      #4C8EFF;
+    --accent-quiet:#7FADFF;
+    --accent-wash: rgba(76, 142, 255, 0.14);
+    --accent-line: rgba(76, 142, 255, 0.38);
+    --accent-glow: rgba(76, 142, 255, 0.45);
 
     --sev-block: #F0708F;
     --sev-warn:  #F0B849;
@@ -119,6 +140,10 @@
     --sev-block-wash: rgba(240, 112, 143, 0.17);
     --sev-warn-wash:  rgba(240, 184, 73, 0.16);
     --sev-allow-wash: rgba(139, 150, 163, 0.15);
+    --shadow-panel: 0 1px 0 rgba(255,255,255,.05) inset,
+                    0 20px 48px -22px rgba(0,0,0,.9);
+    --shadow-glow:  0 0 0 1px var(--accent-line),
+                    0 10px 28px -10px var(--accent-glow);
     color-scheme: dark;
   }
 

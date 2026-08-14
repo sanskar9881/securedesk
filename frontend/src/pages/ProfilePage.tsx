@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Navbar from "../components/Navbar";
+import { useSidebar } from "../context/SidebarContext";
 import api from "../api/axios";
 import toast from "react-hot-toast";
 import { useAuth } from "../context/AuthContext";
@@ -27,6 +28,7 @@ interface Profile {
 }
 
 export default function ProfilePage() {
+  const { collapsed } = useSidebar();
   const { updateUser } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -73,7 +75,7 @@ export default function ProfilePage() {
   if (fetching) return (
     <div className="flex">
       <Navbar />
-      <main className="ml-64 flex-1 min-h-screen bg-gray-950 flex items-center justify-center">
+      <main className={`ml-0 min-w-0 flex-1 min-h-screen bg-gray-950 flex items-center justify-center ${collapsed ? "lg:ml-[72px]" : "lg:ml-64"}`}>
         <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-indigo-500" />
       </main>
     </div>
@@ -82,7 +84,7 @@ export default function ProfilePage() {
   if (!profile) return (
     <div className="flex">
       <Navbar />
-      <main className="ml-64 flex-1 min-h-screen bg-gray-950 flex items-center justify-center">
+      <main className={`ml-0 min-w-0 flex-1 min-h-screen bg-gray-950 flex items-center justify-center ${collapsed ? "lg:ml-[72px]" : "lg:ml-64"}`}>
         <p className="text-gray-500">Failed to load profile. <button onClick={() => window.location.reload()} className="text-indigo-400 hover:underline">Retry</button></p>
       </main>
     </div>
@@ -92,7 +94,7 @@ export default function ProfilePage() {
     <div className="flex">
       <Navbar />
       {/* IMPORTANT: z-index and isolation fix for profile page */}
-      <main className="ml-64 flex-1 min-h-screen bg-gray-950 p-8" style={{ position: "relative", zIndex: 0 }}>
+      <main className={`ml-0 min-w-0 flex-1 min-h-screen bg-gray-950 p-8 ${collapsed ? "lg:ml-[72px]" : "lg:ml-64"}`} style={{ position: "relative", zIndex: 0 }}>
 
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">

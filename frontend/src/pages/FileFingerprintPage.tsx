@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Navbar from "../components/Navbar";
+import { useSidebar } from "../context/SidebarContext";
 import api from "../api/axios";
 import { Database, Loader2, RefreshCw, Copy, CheckCircle } from "lucide-react";
 
@@ -9,6 +10,7 @@ const riskCls = (r:string) => r==="HIGH"?"bg-red-900/40 text-red-400 border bord
 const actCls  = (a:string) => a==="BLOCK"?"bg-red-900/40 text-red-400":a==="WARN"?"bg-amber-900/40 text-amber-400":"bg-green-900/40 text-green-400";
 
 export default function FileFingerprintPage() {
+  const { collapsed } = useSidebar();
   const [files, setFiles]     = useState<FP[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExp]    = useState<string|null>(null);
@@ -22,7 +24,7 @@ export default function FileFingerprintPage() {
   return (
     <div className="flex">
       <Navbar/>
-      <main className="ml-64 flex-1 min-h-screen bg-gray-950 p-8">
+      <main className={`ml-0 min-w-0 flex-1 min-h-screen bg-gray-950 p-8 ${collapsed ? "lg:ml-[72px]" : "lg:ml-64"}`}>
         <div className="mb-8"><h1 className="text-2xl font-bold text-white">File Fingerprints</h1><p className="text-gray-500 text-sm mt-1">SHA-256 fingerprints of every scanned file</p></div>
         <div className="flex items-center gap-3 mb-5">
           <div className="bg-indigo-950/40 border border-indigo-800/30 rounded-xl px-4 py-2 flex items-center gap-2">

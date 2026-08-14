@@ -1,8 +1,13 @@
 /**
- * SecureDesk mark — a boundary with a monitored crossing.
- * Data (the dash, entering from the left) meets the threshold (the vertical
- * rule) and stops. Deliberately not a shield: every security company uses one.
+ * SecureDesk mark — a shield with the S carried through as a channel, not a
+ * cutout so much as a threshold data has to pass. The asset is a single
+ * transparent PNG (public/brand/mark.png); it's applied as a CSS mask rather
+ * than rendered directly, so `tone` recolors it the same way the previous
+ * SVG mark did with `currentColor` — one file, any color, any surface.
  */
+const MARK_URL = "/brand/mark.png";
+const ASPECT = 336 / 407; // source asset's natural width:height
+
 export default function Mark({
   size = 24,
   className = "",
@@ -13,25 +18,24 @@ export default function Mark({
   tone?: string;
 }) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      className={className}
+    <span
+      role="img"
       aria-hidden="true"
-      focusable="false"
-    >
-      {/* frame */}
-      <rect
-        x="2.25" y="2.25" width="19.5" height="19.5" rx="3"
-        stroke={tone} strokeWidth="1.5" opacity="0.42"
-      />
-      {/* the threshold */}
-      <path d="M14.25 5.5V18.5" stroke={tone} strokeWidth="1.9" strokeLinecap="round" />
-      {/* data arriving, halted at the line */}
-      <path d="M6 12H11.4" stroke={tone} strokeWidth="1.9" strokeLinecap="round" />
-    </svg>
+      className={`inline-block flex-none ${className}`}
+      style={{
+        width: size * ASPECT,
+        height: size,
+        backgroundColor: tone,
+        WebkitMaskImage: `url(${MARK_URL})`,
+        maskImage: `url(${MARK_URL})`,
+        WebkitMaskRepeat: "no-repeat",
+        maskRepeat: "no-repeat",
+        WebkitMaskSize: "contain",
+        maskSize: "contain",
+        WebkitMaskPosition: "center",
+        maskPosition: "center",
+      }}
+    />
   );
 }
 

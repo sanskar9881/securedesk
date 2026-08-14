@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import Navbar from "../components/Navbar";
+import { useSidebar } from "../context/SidebarContext";
 import Header from "../components/Header";
 import api from "../api/axios";
 import toast from "react-hot-toast";
@@ -34,6 +35,7 @@ const findingIcon: Record<string, React.ReactNode> = {
 };
 
 export default function FileSharePage() {
+  const { collapsed } = useSidebar();
   const [recipient, setRecipient] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -83,7 +85,7 @@ export default function FileSharePage() {
   return (
     <div className="flex">
       <Navbar />
-      <main className="ml-0 lg:ml-64 flex-1 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300">
+      <main className={`ml-0 flex-1 min-w-0 min-h-screen bg-gray-950 p-3 md:p-8 transition-all duration-300 ${collapsed ? "lg:ml-[72px]" : "lg:ml-64"}`}>
         <Header title="Send File" subtitle="AI analyzes every transaction for threats and sensitive data" />
 
         <div className="grid grid-cols-2 gap-6 max-w-5xl">
