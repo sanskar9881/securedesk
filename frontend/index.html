@@ -8,9 +8,82 @@
     <meta name="theme-color" content="#0D1117" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SecureDesk</title>
+
+    <!--
+      Pre-hydration splash. This paints before the JS bundle parses, so the
+      user sees the brand mark instead of a white flash on first load and on
+      a hard refresh. It is removed by main.tsx once React mounts.
+      Colours are inlined (not tokens) because the stylesheet has not loaded
+      at this point; they match --surface-0 / --accent in the dark palette.
+    -->
+    <style>
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        background: #0A0C12;
+        transition: opacity .28s ease;
+      }
+      #boot.boot-done { opacity: 0; pointer-events: none; }
+
+      #boot .boot-mark-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #boot .boot-glow {
+        position: absolute;
+        width: 80px; height: 80px;
+        border-radius: 50%;
+        background: rgba(76, 142, 255, .14);
+        animation: boot-glow 1.6s cubic-bezier(.4, 0, .6, 1) infinite;
+      }
+      #boot .boot-mark {
+        position: relative;
+        width: 36px; height: 44px;
+        background-color: #4C8EFF;
+        -webkit-mask: url(/brand/mark.png) no-repeat center / contain;
+        mask: url(/brand/mark.png) no-repeat center / contain;
+        animation: boot-mark 1.6s cubic-bezier(.4, 0, .6, 1) infinite;
+      }
+      #boot .boot-label {
+        font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+        font-size: 11px;
+        letter-spacing: .13em;
+        text-transform: uppercase;
+        color: #7E8798;
+      }
+
+      @keyframes boot-mark {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50%      { opacity: .72; transform: scale(.94); }
+      }
+      @keyframes boot-glow {
+        0%, 100% { opacity: .5; transform: scale(.8); }
+        50%      { opacity: 0; transform: scale(1.5); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot .boot-glow, #boot .boot-mark { animation: none; }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+
+    <div id="boot" role="status" aria-label="Loading SecureDesk">
+      <div class="boot-mark-wrap">
+        <span class="boot-glow"></span>
+        <span class="boot-mark"></span>
+      </div>
+      <span class="boot-label">SecureDesk</span>
+    </div>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

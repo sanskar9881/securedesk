@@ -229,3 +229,130 @@ export function Sparkline({
     </svg>
   );
 }
+
+/* ── Severity split ────────────────────────────────────────────────
+   A single stacked bar rather than a donut: comparing three parts of one
+   whole is a length judgement, which people read far more accurately than
+   the angle judgement a pie/donut demands. Each segment is labelled, so
+   identity never rests on colour.                                    */
+export function SeveritySplit({
+  block,
+  warn,
+  allow,
+}: {
+  block: number;
+  warn: number;
+  allow: number;
+}) {
+  const total = block + warn + allow;
+  const rows = [
+    { key: "block", label: "High", value: block, token: "var(--sev-block)" },
+    { key: "warn", label: "Medium", value: warn, token: "var(--sev-warn)" },
+    {
+      key: "allow",
+      label: "Low",
+      value: allow,
+      token: "color-mix(in srgb, var(--sev-allow) 58%, var(--surface-1))",
+    },
+  ];
+
+  if (!total) {
+    return (
+      <p className="text-[12.5px]" style={{ color: "var(--text-4)" }}>
+        Nothing recorded yet.
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      <div
+        className="flex h-2.5 rounded-sm overflow-hidden"
+        style={{ background: "var(--surface-in)", gap: "2px" }}
+        role="img"
+        aria-label={`Severity split: ${rows.map((r) => `${r.label} ${r.value}`).join(", ")}`}
+      >
+        {rows.map((r) =>
+          r.value ? (
+            <span
+              key={r.key}
+              style={{ background: r.token, width: `${(r.value / total) * 100}%` }}
+            />
+          ) : null
+        )}
+      </div>
+
+      <dl className="mt-3 space-y-1.5">
+        {rows.map((r) => (
+          <div key={r.key} className="flex items-center gap-2 text-[12.5px]">
+            <span
+              className="w-2 h-2 rounded-[2px] flex-none"
+              style={{ background: r.token }}
+              aria-hidden="true"
+            />
+            <dt className="flex-1" style={{ color: "var(--text-3)" }}>
+              {r.label}
+            </dt>
+            <dd className="tabular-nums font-medium" style={{ color: "var(--text-1)" }}>
+              {r.value}
+            </dd>
+            <dd className="tabular-nums w-9 text-right" style={{ color: "var(--text-4)" }}>
+              {Math.round((r.value / total) * 100)}%
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+/* ── Ranked bars ───────────────────────────────────────────────────
+   Who or what is driving the risk. Sorted descending and bar-encoded so
+   the ranking reads before any number does.                          */
+export function RankedBars({
+  rows,
+  emptyLabel = "Nothing to rank yet.",
+}: {
+  rows: { label: string; value: number; hint?: string }[];
+  emptyLabel?: string;
+}) {
+  if (!rows.length) {
+    return (
+      <p className="text-[12.5px]" style={{ color: "var(--text-4)" }}>
+        {emptyLabel}
+      </p>
+    );
+  }
+  const max = Math.max(...rows.map((r) => r.value), 1);
+
+  return (
+    <ol className="space-y-2.5">
+      {rows.map((r, i) => (
+        <li key={`${r.label}-${i}`}>
+          <div className="flex items-baseline justify-between gap-3 mb-1">
+            <span className="text-[12.5px] truncate" style={{ color: "var(--text-2)" }}>
+              {r.label}
+            </span>
+            <span
+              className="text-[12px] tabular-nums flex-none"
+              style={{ color: "var(--text-3)" }}
+            >
+              {r.value}
+              {r.hint && <span style={{ color: "var(--text-4)" }}> {r.hint}</span>}
+            </span>
+          </div>
+          <div className="h-1.5 rounded-sm" style={{ background: "var(--surface-in)" }}>
+            <div
+              className="h-full rounded-sm"
+              style={{
+                width: `${(r.value / max) * 100}%`,
+                background: "var(--accent)",
+                opacity: 1 - i * 0.13,
+              }}
+            />
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}

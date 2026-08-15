@@ -6,12 +6,29 @@ import { apiErrorMessage } from "../api/errors";
 import { useAuth } from "../context/AuthContext";
 import AuthShell, { AsideProof } from "../components/AuthShell";
 
+/**
+ * Which console the person means to open.
+ *
+ * This is a convenience and a safety net, NOT an authorisation control: the
+ * server signs the token with the role held in the database no matter what is
+ * picked here. Choosing "Administrator" on an employee account is refused, not
+ * granted — see the `expected_role` check in routes/auth.py.
+ */
+const ENTRY_POINTS = [
+  { id: "admin", label: "Administrator", hint: "Full organisation control" },
+  { id: "manager", label: "Manager", hint: "Your team's activity" },
+  { id: "user", label: "Employee", hint: "Your own workspace" },
+] as const;
+
+type EntryPoint = (typeof ENTRY_POINTS)[number]["id"];
+
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [entry, setEntry] = useState<EntryPoint>("user");
   const [reveal, setReveal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -28,9 +45,11 @@ export default function LoginPage() {
       const { data } = await api.post("/auth/login", {
         identifier: identifier.trim(),
         password,
+        expected_role: entry,
       });
 
-      // The server is the only authority on role — we never ask the user.
+      // The server remains the only authority on role — `entry` above is only
+      // compared against what's stored, never trusted as a grant.
       const role = (data.role || "user").toLowerCase();
       login(data.access_token, role, data.name, data.user_id || "");
       navigate(role === "admin" || role === "manager" ? "/admin" : "/dashboard");
@@ -77,6 +96,39 @@ export default function LoginPage() {
       )}
 
       <form onSubmit={submit} className="space-y-4">
+        <fieldset>
+          <legend className="field-label">Sign in as</legend>
+          <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Sign in as">
+            {ENTRY_POINTS.map((p) => {
+              const on = entry === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  title={p.hint}
+                  onClick={() => {
+                    setEntry(p.id);
+                    setError("");
+                  }}
+                  className="rounded px-2 py-2 text-[12.5px] font-medium border transition-colors text-center"
+                  style={{
+                    background: on ? "var(--accent-wash)" : "transparent",
+                    borderColor: on ? "var(--accent-line)" : "var(--line-2)",
+                    color: on ? "var(--accent)" : "var(--text-3)",
+                  }}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-[11.5px]" style={{ color: "var(--text-4)" }}>
+            {ENTRY_POINTS.find((p) => p.id === entry)?.hint}
+          </p>
+        </fieldset>
+
         <div>
           <label htmlFor="identifier" className="field-label">
             Work email or phone

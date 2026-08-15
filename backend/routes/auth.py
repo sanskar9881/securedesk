@@ -46,9 +46,16 @@ async def get_current_user(
 
 
 async def admin_only(user=Depends(get_current_user)):
-    """Dependency to restrict access to admin users only."""
+    """
+    Legacy gate: any staff member (admin OR manager).
+
+    Kept because several routes still import it, but prefer the explicit
+    guards in core.rbac — `require_admin` for organisation-wide control and
+    `require_staff` (plus `visibility_filter`) for oversight screens where a
+    manager should see only their own reports.
+    """
     if user.get("role") not in ("admin", "manager"):
-        raise HTTPException(403, "Admin access required")
+        raise HTTPException(403, "Manager or administrator access required")
     return user
 
 
@@ -65,6 +72,11 @@ class RegisterBody(BaseModel):
 class LoginBody(BaseModel):
     identifier: str
     password:   str
+    # Which console the person intends to open. This NEVER grants anything —
+    # the role always comes from the database. It is only compared against the
+    # stored role so someone who picks the wrong door is told so plainly
+    # instead of silently landing in a console they didn't expect.
+    expected_role: str | None = None
 
 
 @router.post("/register")
@@ -172,8 +184,21 @@ async def login(body: LoginBody):
         raise HTTPException(401, "Wrong password. Please try again.")
 
     # ── Return the role EXACTLY as stored in DB ──────────────────
+    # The client may say which console it expected; that is only ever used to
+    # reject a mismatch. It can never widen access, because the token is signed
+    # with `stored_role` regardless of what was requested.
     stored_role = user.get("role", "user")
-    token       = make_token(user["_id"], stored_role)
+
+    wanted = (body.expected_role or "").strip().lower()
+    if wanted and wanted in ("admin", "manager", "user") and wanted != stored_role:
+        label = {"admin": "an administrator", "manager": "a manager", "user": "an employee"}
+        raise HTTPException(
+            403,
+            f"This account is registered as {label[stored_role]}, not {label[wanted]}. "
+            f"Sign in as {label[stored_role]} instead, or ask your administrator to change your access.",
+        )
+
+    token = make_token(user["_id"], stored_role)
 
     return {
         "access_token": token,

@@ -4,7 +4,10 @@ import Navbar from "../components/Navbar";
 import Header, { Console } from "../components/Header";
 import api from "../api/axios";
 import { ArrowUpRight, Inbox } from "lucide-react";
-import { EventVolume, SeverityLegend, Sparkline, type Bucket } from "../components/charts";
+import {
+  EventVolume, SeverityLegend, Sparkline, SeveritySplit, RankedBars,
+  type Bucket,
+} from "../components/charts";
 
 /* ── API shapes (bound to what the backend actually returns) ───── */
 interface Stats {
@@ -225,6 +228,31 @@ export default function AdminDashboard() {
   const dailyTotals = buckets.map((b) => b.allow + b.warn + b.block);
   const hasSeries = dailyTotals.some((n) => n > 0);
 
+  /** Severity mix and the people/destinations driving it, from the same rows. */
+  const severityMix = rows.reduce(
+    (acc, r) => {
+      acc[sevOf(r.severity)] += 1;
+      return acc;
+    },
+    { allow: 0, warn: 0, block: 0 }
+  );
+
+  const rankTop = (pick: (r: Row) => string | undefined, limit = 5) => {
+    const counts = new Map<string, number>();
+    for (const r of rows) {
+      const key = (pick(r) || "").trim();
+      if (!key) continue;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([label, value]) => ({ label, value, hint: "events" }));
+  };
+
+  const topActors = rankTop((r) => r.sender_name);
+  const topDestinations = rankTop((r) => r.recipient_email);
+
   const total = stats?.total ?? 0;
   const suspicious = stats?.suspicious ?? 0;
   const legit = stats?.legitimate ?? 0;
@@ -415,6 +443,40 @@ export default function AdminDashboard() {
                 </table>
               </div>
             )}
+          </Panel>
+
+          <Panel title="Severity mix" meta={`${rows.length} events`}>
+            <div className="px-4 py-4">
+              {loading ? (
+                <div className="skeleton h-24 w-full" />
+              ) : (
+                <SeveritySplit
+                  block={severityMix.block}
+                  warn={severityMix.warn}
+                  allow={severityMix.allow}
+                />
+              )}
+            </div>
+          </Panel>
+
+          <Panel title="Most active people">
+            <div className="px-4 py-4">
+              {loading ? (
+                <div className="skeleton h-28 w-full" />
+              ) : (
+                <RankedBars rows={topActors} emptyLabel="No sender activity yet." />
+              )}
+            </div>
+          </Panel>
+
+          <Panel title="Top destinations">
+            <div className="px-4 py-4">
+              {loading ? (
+                <div className="skeleton h-28 w-full" />
+              ) : (
+                <RankedBars rows={topDestinations} emptyLabel="No destinations recorded yet." />
+              )}
+            </div>
           </Panel>
 
           <Panel title="Open alerts" meta={alerts.length ? `${alerts.length}` : undefined}>

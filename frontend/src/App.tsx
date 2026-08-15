@@ -54,8 +54,8 @@ export default function App() {
           <Route path="/history"    element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
 
           {/* Admin */}
-          <Route path="/admin"       element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/admin/users" element={<ProtectedRoute role="admin"><AdminUsersPage /></ProtectedRoute>} />
+          <Route path="/admin"       element={<ProtectedRoute allow={["admin", "manager"]}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/users" element={<ProtectedRoute allow={["admin"]}><AdminUsersPage /></ProtectedRoute>} />
 
           {/* Shared */}
           <Route path="/profile"           element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
@@ -69,13 +69,13 @@ export default function App() {
           <Route path="/dlp"          element={<ProtectedRoute><DLPScanPage /></ProtectedRoute>} />
           <Route path="/ai-copilot"   element={<ProtectedRoute><AICopilotPage /></ProtectedRoute>} />
           <Route path="/activity"     element={<ProtectedRoute><ActivityLogsPage /></ProtectedRoute>} />
-          <Route path="/fingerprints" element={<ProtectedRoute><FileFingerprintPage /></ProtectedRoute>} />
+          <Route path="/fingerprints" element={<ProtectedRoute allow={["admin", "manager"]}><FileFingerprintPage /></ProtectedRoute>} />
 
           {/* Enterprise */}
-          <Route path="/compliance"    element={<ProtectedRoute><CompliancePage /></ProtectedRoute>} />
-          <Route path="/ueba"          element={<ProtectedRoute><UEBAPage /></ProtectedRoute>} />
-          <Route path="/organization"  element={<ProtectedRoute><OrganizationPage /></ProtectedRoute>} />
-          <Route path="/whatsapp-logs" element={<ProtectedRoute><WhatsAppLogsPage /></ProtectedRoute>} />
+          <Route path="/compliance"    element={<ProtectedRoute allow={["admin", "manager"]}><CompliancePage /></ProtectedRoute>} />
+          <Route path="/ueba"          element={<ProtectedRoute allow={["admin", "manager"]}><UEBAPage /></ProtectedRoute>} />
+          <Route path="/organization"  element={<ProtectedRoute allow={["admin"]}><OrganizationPage /></ProtectedRoute>} />
+          <Route path="/whatsapp-logs" element={<ProtectedRoute allow={["admin", "manager"]}><WhatsAppLogsPage /></ProtectedRoute>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -1,27 +1,32 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Loader2 } from "lucide-react";
+import Splash from "./Splash";
+
+type Role = "admin" | "manager" | "user";
 
 interface Props {
   children: React.ReactNode;
-  role?: "admin" | "manager";
+  /**
+   * Roles allowed through. Omit to allow any signed-in user.
+   *
+   * This is a UX guard only — it stops someone navigating into a screen they
+   * can't use. It is NOT the security boundary: every endpoint behind these
+   * screens enforces the same rule server-side, because a client-side check
+   * is trivially bypassed.
+   */
+  allow?: Role[];
 }
 
-export default function ProtectedRoute({ children, role }: Props) {
+export default function ProtectedRoute({ children, allow }: Props) {
   const { user, loading } = useAuth();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-indigo-400 animate-spin"/>
-      </div>
-    );
-  }
+  if (loading) return <Splash label="Checking session" />;
 
   if (!user) return <Navigate to="/login" replace />;
 
-  if (role === "admin" && !["admin","manager"].includes(user.role)) {
-    return <Navigate to="/dashboard" replace />;
+  if (allow && !allow.includes(user.role)) {
+    // Send them somewhere they can actually use rather than a dead end.
+    return <Navigate to={user.role === "user" ? "/dashboard" : "/admin"} replace />;
   }
 
   return <>{children}</>;

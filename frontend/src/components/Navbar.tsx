@@ -48,7 +48,9 @@ export default function Navbar() {
   const groups: Group[] = isStaff
     ? [
         {
-          title: "Monitor",
+          // Admin sees the whole organisation here; a manager sees only the
+          // people reporting to them. Same screens, server-scoped data.
+          title: isAdmin ? "Organisation" : "My team",
           items: [
             { to: "/admin", icon: <LayoutDashboard className={ic} />, label: "Overview" },
             { to: "/activity", icon: <Activity className={ic} />, label: "Event stream" },
@@ -67,8 +69,15 @@ export default function Navbar() {
         {
           title: "Govern",
           items: [
-            ...(isAdmin ? [{ to: "/admin/users", icon: <Users className={ic} />, label: "People" }] : []),
-            { to: "/organization", icon: <Building2 className={ic} />, label: "Organisation" },
+            // People management and org settings can grant privilege or
+            // reconfigure the tenant, so they are administrator-only. The
+            // routes enforce this too — hiding the link is not the control.
+            ...(isAdmin
+              ? [
+                  { to: "/admin/users", icon: <Users className={ic} />, label: "People" },
+                  { to: "/organization", icon: <Building2 className={ic} />, label: "Organisation" },
+                ]
+              : []),
             { to: "/compliance", icon: <FileCheck className={ic} />, label: "Compliance" },
           ],
         },
