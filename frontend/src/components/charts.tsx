@@ -184,6 +184,364 @@ export function EventVolume({ data, height = 168 }: { data: Bucket[]; height?: n
   );
 }
 
+/* ── Multi-line trend, with a toggleable legend ──────────────────────
+   Same axis/gridline/tooltip mechanics as EventVolume, but lines rather
+   than stacked bars — for comparing several time series (not parts of one
+   whole) over the same window. Clicking a legend item hides that series,
+   for isolating a single signal.                                      */
+export function MultiLine({
+  data,
+  series,
+  height = 168,
+}: {
+  data: Array<{ label: string; full: string } & Record<string, number | string>>;
+  series: { key: string; label: string; token: string }[];
+  height?: number;
+}) {
+  const [hover, setHover] = useState<number | null>(null);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const visible = series.filter((s) => !hidden.has(s.key));
+
+  const max = Math.max(1, ...data.flatMap((d) => visible.map((s) => Number(d[s.key]) || 0)));
+  const step = max <= 4 ? 1 : max <= 10 ? 2 : max <= 40 ? 10 : Math.ceil(max / 4 / 10) * 10;
+  const top = Math.ceil(max / step) * step || 1;
+  const ticks = Array.from({ length: top / step + 1 }, (_, i) => i * step);
+
+  const AXIS_W = 30;
+  const W = 100;
+  const plotH = height;
+  const slot = W / Math.max(data.length - 1, 1);
+  const y = (v: number) => plotH - (v / top) * (plotH - 6);
+
+  const toggle = (key: string) =>
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  return (
+    <div>
+      <div className="flex items-center gap-4 mb-3 flex-wrap">
+        {series.map((s) => {
+          const off = hidden.has(s.key);
+          return (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => toggle(s.key)}
+              className="flex items-center gap-1.5 transition-opacity"
+              style={{ opacity: off ? 0.4 : 1, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+              aria-pressed={!off}
+            >
+              <span className="w-2 h-2 rounded-xs flex-none" style={{ background: s.token }} />
+              <span className="text-[11.5px]" style={{ color: "var(--text-3)" }}>
+                {s.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="relative flex" style={{ gap: 8 }}>
+        <div className="relative flex-none" style={{ width: AXIS_W, height: plotH }} aria-hidden="true">
+          {ticks.map((t) => (
+            <span
+              key={t}
+              className="mono text-[9.5px] absolute right-0 tabular-nums"
+              style={{ top: y(t) - 6, color: "var(--text-4)" }}
+            >
+              {t}
+            </span>
+          ))}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <svg
+            viewBox={`0 0 ${W} ${plotH}`}
+            width="100%"
+            height={plotH}
+            preserveAspectRatio="none"
+            role="img"
+            aria-label="Threat activity trend over the last 14 days"
+            style={{ display: "block", overflow: "visible" }}
+          >
+            {ticks.map((t) => (
+              <line
+                key={t}
+                x1={0} x2={W} y1={y(t)} y2={y(t)}
+                stroke="var(--line-1)" strokeWidth="0.5"
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+
+            {visible.map((s) => {
+              const pts = data.map((d, i) => [i * slot, y(Number(d[s.key]) || 0)]);
+              const path = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(" ");
+              return (
+                <path
+                  key={s.key}
+                  d={path}
+                  fill="none"
+                  stroke={s.token}
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  vectorEffect="non-scaling-stroke"
+                />
+              );
+            })}
+
+            {hover !== null && (
+              <line
+                x1={hover * slot} x2={hover * slot} y1={0} y2={plotH}
+                stroke="var(--line-2)" strokeWidth="0.5" vectorEffect="non-scaling-stroke"
+              />
+            )}
+
+            {data.map((_, i) => (
+              <rect
+                key={i}
+                x={Math.max(0, i * slot - slot / 2)} y={0} width={slot} height={plotH}
+                fill="transparent"
+                onMouseEnter={() => setHover(i)}
+                onMouseLeave={() => setHover(null)}
+              />
+            ))}
+
+            {hover !== null &&
+              visible.map((s) => (
+                <circle key={s.key} cx={hover * slot} cy={y(Number(data[hover][s.key]) || 0)} r="2" fill={s.token} />
+              ))}
+
+            <line x1={0} x2={W} y1={plotH} y2={plotH} stroke="var(--line-2)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+          </svg>
+
+          <div className="flex mt-1.5">
+            {data.map((d, i) => {
+              const every = data.length > 10 ? Math.ceil(data.length / 6) : 1;
+              return (
+                <span
+                  key={d.full}
+                  className="mono text-[9.5px] text-center"
+                  style={{ flex: 1, color: "var(--text-4)" }}
+                >
+                  {i % every === 0 ? d.label : " "}
+                </span>
+              );
+            })}
+          </div>
+
+          {hover !== null && (
+            <div
+              className="absolute pointer-events-none rounded-md px-3 py-2 z-20"
+              style={{
+                background: "var(--surface-2)",
+                border: "1px solid var(--line-2)",
+                boxShadow: "var(--shadow-panel)",
+                top: 4,
+                left: `${Math.min(Math.max((hover * slot / W) * 100, 6), 74)}%`,
+              }}
+              role="status"
+            >
+              <p className="mono text-[10px] tracking-[0.08em] uppercase mb-1.5" style={{ color: "var(--text-4)" }}>
+                {data[hover].full}
+              </p>
+              {series.map((s) => (
+                <p
+                  key={s.key}
+                  className="flex items-center gap-2 text-[11.5px]"
+                  style={{ color: hidden.has(s.key) ? "var(--text-4)" : "var(--text-2)" }}
+                >
+                  <span className="w-2 h-2 rounded-xs flex-none" style={{ background: s.token }} />
+                  <span className="flex-1">{s.label}</span>
+                  <span className="mono tabular-nums" style={{ color: "var(--text-1)" }}>
+                    {data[hover][s.key]}
+                  </span>
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Risk ring — composite posture score ──────────────────────────── */
+export function RiskRing({ score, size = 128, strokeWidth = 10 }: { score: number; size?: number; strokeWidth?: number }) {
+  const clamped = Math.max(0, Math.min(100, score));
+  const r = (size - strokeWidth) / 2;
+  const c = 2 * Math.PI * r;
+  const dash = c * (clamped / 100);
+  const tone = clamped >= 76 ? "var(--sev-block)" : clamped >= 51 ? "var(--sev-warn)" : "var(--accent)";
+
+  return (
+    <svg
+      width={size} height={size} viewBox={`0 0 ${size} ${size}`}
+      role="img" aria-label={`Security risk score: ${clamped} of 100`}
+    >
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--surface-in)" strokeWidth={strokeWidth} />
+      <circle
+        cx={size / 2} cy={size / 2} r={r} fill="none"
+        stroke={tone} strokeWidth={strokeWidth} strokeLinecap="round"
+        strokeDasharray={`${dash} ${c - dash}`}
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        style={{ transition: "stroke-dasharray .4s cubic-bezier(.2,.8,.2,1)" }}
+      />
+      <text
+        x="50%" y="46%" textAnchor="middle" dominantBaseline="middle"
+        style={{ fill: "var(--text-1)", fontSize: size * 0.26, fontWeight: 650, fontFamily: "inherit" }}
+      >
+        {clamped}
+      </text>
+      <text
+        x="50%" y="66%" textAnchor="middle" dominantBaseline="middle"
+        className="mono"
+        style={{ fill: "var(--text-4)", fontSize: size * 0.09, letterSpacing: "0.08em" }}
+      >
+        / 100
+      </text>
+    </svg>
+  );
+}
+
+/* ── Horizontal risk bars — department/entity risk, score + volume ─── */
+export function RiskHBars({
+  rows,
+  emptyLabel = "No department activity yet.",
+}: {
+  rows: { label: string; score: number; events: number }[];
+  emptyLabel?: string;
+}) {
+  if (!rows.length) {
+    return (
+      <p className="text-[12.5px]" style={{ color: "var(--text-4)" }}>
+        {emptyLabel}
+      </p>
+    );
+  }
+  const toneOf = (s: number) =>
+    s >= 70 ? "var(--sev-block)" : s >= 45 ? "var(--sev-warn)" : "color-mix(in srgb, var(--sev-allow) 58%, var(--surface-1))";
+
+  return (
+    <ol className="space-y-3">
+      {rows.map((d) => (
+        <li key={d.label}>
+          <div className="flex items-baseline justify-between gap-3 mb-1">
+            <span className="text-[12.5px]" style={{ color: "var(--text-2)" }}>
+              {d.label}
+            </span>
+            <span className="flex items-baseline gap-2 flex-none">
+              <span className="mono text-[13px] tabular-nums font-medium" style={{ color: "var(--text-1)" }}>
+                {d.score}
+              </span>
+              <span className="mono text-[11px] tabular-nums" style={{ color: "var(--text-4)" }}>
+                {d.events} events
+              </span>
+            </span>
+          </div>
+          <div className="h-2 rounded-sm" style={{ background: "var(--surface-in)" }}>
+            <div
+              className="h-full rounded-sm"
+              style={{ width: `${d.score}%`, background: toneOf(d.score), transition: "width .3s" }}
+            />
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/* ── Donut — composition of a whole into a handful of named parts ────
+   Reserved for genuine part-of-whole reads with few categories (here:
+   exposure by data type). SeveritySplit stays a stacked bar; this is the
+   one place a donut earns its keep over that, because the categories are
+   an identity set (what kind), not an ordered escalation.              */
+export function Donut({
+  data,
+  size = 128,
+}: {
+  data: { label: string; value: number; token: string }[];
+  size?: number;
+}) {
+  const [hover, setHover] = useState<number | null>(null);
+  const total = data.reduce((s, d) => s + d.value, 0);
+  const r = size / 2 - 13;
+  const cx = size / 2;
+  const cy = size / 2;
+  const c = 2 * Math.PI * r;
+
+  if (!total) {
+    return (
+      <p className="text-[12.5px]" style={{ color: "var(--text-4)" }}>
+        No exposure data yet.
+      </p>
+    );
+  }
+
+  let offset = 0;
+
+  return (
+    <div className="flex items-center gap-5 flex-wrap">
+      <svg
+        width={size} height={size} viewBox={`0 0 ${size} ${size}`}
+        role="img"
+        aria-label={`Sensitive data exposure: ${data.map((d) => `${d.label} ${Math.round((d.value / total) * 100)}%`).join(", ")}`}
+      >
+        <g transform={`rotate(-90 ${cx} ${cy})`}>
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--surface-in)" strokeWidth={13} />
+          {data.map((d, i) => {
+            const frac = d.value / total;
+            const dash = c * frac;
+            const seg = (
+              <circle
+                key={d.label}
+                cx={cx} cy={cy} r={r} fill="none"
+                stroke={d.token}
+                strokeWidth={hover === i ? 15 : 13}
+                strokeDasharray={`${dash} ${c - dash}`}
+                strokeDashoffset={-offset}
+                opacity={hover === null || hover === i ? 1 : 0.42}
+                style={{ transition: "opacity .12s, stroke-width .12s", cursor: "default" }}
+                onMouseEnter={() => setHover(i)}
+                onMouseLeave={() => setHover(null)}
+              />
+            );
+            offset += dash;
+            return seg;
+          })}
+        </g>
+        <text
+          x="50%" y="50%" textAnchor="middle" dominantBaseline="middle" className="mono"
+          style={{ fill: "var(--text-1)", fontSize: size * 0.15, fontWeight: 650 }}
+        >
+          {hover !== null ? `${Math.round((data[hover].value / total) * 100)}%` : total}
+        </text>
+      </svg>
+
+      <ul className="space-y-1.5 min-w-0 flex-1">
+        {data.map((d, i) => (
+          <li
+            key={d.label}
+            className="flex items-center gap-2 text-[12.5px] transition-colors"
+            style={{ color: hover === i ? "var(--text-1)" : "var(--text-3)" }}
+            onMouseEnter={() => setHover(i)}
+            onMouseLeave={() => setHover(null)}
+          >
+            <span className="w-2 h-2 rounded-xs flex-none" style={{ background: d.token }} />
+            <span className="flex-1 truncate">{d.label}</span>
+            <span className="mono tabular-nums" style={{ color: "var(--text-1)" }}>
+              {Math.round((d.value / total) * 100)}%
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /** Legend — always present, so identity is never colour alone. */
 export function SeverityLegend() {
   return (

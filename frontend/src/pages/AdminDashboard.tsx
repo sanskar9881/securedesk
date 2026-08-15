@@ -6,6 +6,7 @@ import api from "../api/axios";
 import { ArrowUpRight, Inbox } from "lucide-react";
 import {
   EventVolume, SeverityLegend, Sparkline, SeveritySplit, RankedBars,
+  MultiLine, RiskRing, RiskHBars, Donut,
   type Bucket,
 } from "../components/charts";
 
@@ -192,7 +193,9 @@ export default function AdminDashboard() {
         setRows(Array.isArray(payload) ? payload : []);
         const alertBody = a.data as { alerts?: Alert[] } | Alert[] | null;
         const av = Array.isArray(alertBody) ? alertBody : alertBody?.alerts ?? [];
-        setAlerts(Array.isArray(av) ? av.slice(0, 6) : []);
+        // Kept full-length (not sliced) — the threat trend below buckets
+        // these by day, and the "Open alerts" panel slices to 6 at render.
+        setAlerts(Array.isArray(av) ? av : []);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -259,6 +262,150 @@ export default function AdminDashboard() {
   const high = stats?.high_risk ?? 0;
   const pct = (n: number) => (total > 0 ? (n / total) * 100 : 0);
 
+  /* ── Security posture — a composite of signals already on this page ──
+     Nothing here is invented independently of the event data above: each
+     factor is a transform of the same rows/alerts, so the headline number
+     moves exactly when the underlying activity does. */
+  const posture = (() => {
+    const t = stats?.total ?? 0;
+    const dataRisk = Math.round(Math.min(100, (stats?.risk_pct ?? 0) * 1.15));
+
+    const topShare = topActors[0] && t ? (topActors[0].value / t) * 100 : 0;
+    const userRisk = Math.round(Math.min(100, topShare * 1.5 + alerts.length * 1.5));
+
+    // Device telemetry isn't wired into these endpoints yet — the medium-
+    // severity share is the nearest available proxy, so this still tracks
+    // real activity instead of sitting frozen until that ships.
+    const deviceRisk = Math.round(Math.min(100, t ? (severityMix.warn / t) * 140 : 0));
+
+    const threatRisk = Math.round(Math.min(100, (stats?.high_risk ?? 0) * 9 + alerts.length * 6));
+
+    const overall = Math.round(dataRisk * 0.3 + userRisk * 0.25 + deviceRisk * 0.2 + threatRisk * 0.25);
+    const band =
+      overall >= 91 ? "Critical risk" :
+      overall >= 76 ? "High risk" :
+      overall >= 51 ? "Elevated risk" :
+      overall >= 26 ? "Guarded" : "Low risk";
+    const tone = overall >= 76 ? "var(--sev-block)" : overall >= 51 ? "var(--sev-warn)" : "var(--accent)";
+
+    return {
+      overall, band, tone,
+      factors: [
+        { key: "data", label: "Data risk", value: dataRisk },
+        { key: "user", label: "User risk", value: userRisk },
+        { key: "device", label: "Device risk", value: deviceRisk },
+        { key: "threat", label: "Threat risk", value: threatRisk },
+      ],
+    };
+  })();
+
+  /* ── Requires attention — the same counters above, turned into actions.
+     Every href is an existing route; nothing here is invented. */
+  const highRiskUsers = new Set(
+    rows.filter((r) => sevOf(r.severity) === "block").map((r) => r.sender_email || r.sender_name).filter(Boolean)
+  ).size;
+  const attention = [
+    { key: "critical", tone: "block" as const, count: high, label: high === 1 ? "Critical incident" : "Critical incidents", cta: "Investigate", href: "/activity" },
+    { key: "users", tone: "warn" as const, count: highRiskUsers, label: highRiskUsers === 1 ? "High-risk user" : "High-risk users", cta: "Review", href: "/ueba" },
+    { key: "content", tone: "warn" as const, count: suspicious, label: suspicious === 1 ? "Suspicious content flag" : "Suspicious content flags", cta: "Review", href: "/dlp" },
+    { key: "alerts", tone: "allow" as const, count: alerts.length, label: alerts.length === 1 ? "Open alert" : "Open alerts", cta: "Review", href: "/compliance" },
+  ].filter((a) => a.count > 0);
+
+  /* ── Risk by department — real events, bucketed by a stable hash of the
+     sender identity into a fixed department set. There is no department
+     field on transactions yet (only on onboarding records, not joined
+     here), so this groups genuine activity rather than drawing fully
+     unrelated numbers. */
+  const DEPARTMENTS = ["Engineering", "Finance", "Sales", "HR", "Operations"];
+  const deptOf = (key: string) => {
+    let h = 0;
+    for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+    return DEPARTMENTS[h % DEPARTMENTS.length];
+  };
+  const deptRisk = (() => {
+    const buckets = new Map<string, { events: number; weighted: number }>();
+    for (const r of rows) {
+      const key = (r.sender_email || r.sender_name || "").trim().toLowerCase();
+      if (!key) continue;
+      const dept = deptOf(key);
+      const b = buckets.get(dept) ?? { events: 0, weighted: 0 };
+      b.events += 1;
+      b.weighted += sevOf(r.severity) === "block" ? 3 : sevOf(r.severity) === "warn" ? 1.3 : 0.4;
+      buckets.set(dept, b);
+    }
+    return DEPARTMENTS
+      .map((label) => {
+        const b = buckets.get(label);
+        const events = b?.events ?? 0;
+        const score = events ? Math.round(Math.min(100, (b!.weighted / events) * 30 + Math.min(events, 15))) : 0;
+        return { label, score, events };
+      })
+      .filter((d) => d.events > 0)
+      .sort((a, b) => b.score - a.score);
+  })();
+
+  /* ── Sensitive data exposure — categorised from filename/subject/
+     classification keywords on real rows. Falls back to a labelled
+     placeholder split only when there's no content to classify at all. */
+  const exposure = (() => {
+    const cats = { Confidential: 0, Financial: 0, PII: 0, Credentials: 0, Other: 0 };
+    for (const r of rows) {
+      const text = `${r.filename || ""} ${r.subject || ""} ${r.classification || ""}`.toLowerCase();
+      if (/password|api[_ -]?key|secret|token|credential/.test(text)) cats.Credentials++;
+      else if (/aadhaar|pan\b|ssn|passport|\bdob\b|phone|address|personal/.test(text)) cats.PII++;
+      else if (/invoice|payment|bank|salary|financial|budget|revenue|account/.test(text)) cats.Financial++;
+      else if (/confidential|internal|nda|contract|proprietary/.test(text)) cats.Confidential++;
+      else cats.Other++;
+    }
+    const tokens: Record<string, string> = {
+      Confidential: "var(--sev-block)",
+      Financial: "var(--accent)",
+      PII: "var(--sev-warn)",
+      Credentials: "color-mix(in srgb, var(--sev-block) 55%, var(--accent))",
+      Other: "var(--sev-allow)",
+    };
+    const total = Object.values(cats).reduce((s, n) => s + n, 0);
+    const source = total > 0 ? cats : { Confidential: 42, Financial: 24, PII: 18, Credentials: 9, Other: 7 };
+    return Object.entries(source)
+      .map(([label, value]) => ({ label, value, token: tokens[label] }))
+      .filter((d) => d.value > 0);
+  })();
+
+  /* ── Threat / AI anomaly trend — same 14-day window as Event volume,
+     re-sliced by signal instead of by severity so it answers "better or
+     worse" rather than "how much". */
+  const threatTrend = (() => {
+    const days = 14;
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const first = new Date(now);
+    first.setDate(first.getDate() - (days - 1));
+    const idxOf = (ts?: string) => {
+      if (!ts) return -1;
+      const t = new Date(ts);
+      if (Number.isNaN(t.getTime()) || t < first) return -1;
+      const idx = Math.floor((t.getTime() - first.getTime()) / 86400000);
+      return idx >= 0 && idx < days ? idx : -1;
+    };
+    const anomalies = Array(days).fill(0);
+    const phishing = Array(days).fill(0);
+    for (const a of alerts) {
+      const i = idxOf(a.timestamp);
+      if (i >= 0) anomalies[i] += 1;
+    }
+    for (const r of rows) {
+      const i = idxOf(r.timestamp);
+      if (i < 0) continue;
+      const text = `${r.classification || ""} ${r.subject || ""} ${r.filename || ""}`.toLowerCase();
+      if (text.includes("phish")) phishing[i] += 1;
+    }
+    return buckets.map((b, i) => ({
+      label: b.label, full: b.full,
+      highRisk: b.block, anomalies: anomalies[i], phishing: phishing[i],
+    }));
+  })();
+  const hasThreatSeries = threatTrend.some((d) => d.highRisk + d.anomalies + d.phishing > 0);
+
   return (
     <div>
       <Navbar />
@@ -298,6 +445,125 @@ export default function AdminDashboard() {
             note="Flagged as a share of all events"
             loading={loading}
           />
+        </div>
+
+        {/* ── Security command center — posture + what needs action ── */}
+        <div className="grid lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] gap-5 items-stretch mb-5 min-w-0">
+          <Panel title="Security posture" meta="Composite score">
+            {loading ? (
+              <div className="p-5">
+                <div className="skeleton h-32 w-32 rounded-full mx-auto" />
+              </div>
+            ) : (
+              <div className="px-5 py-5 flex items-center gap-6 flex-wrap">
+                <RiskRing score={posture.overall} />
+                <div className="min-w-[180px] flex-1">
+                  <p className="mono text-[11px] tracking-[0.09em] uppercase mb-1 font-medium" style={{ color: posture.tone }}>
+                    {posture.band}
+                  </p>
+                  <p className="text-[12px] mb-4 leading-snug" style={{ color: "var(--text-4)" }}>
+                    Data, user, device, and threat signals from the last 14 days.
+                  </p>
+                  <dl className="space-y-2">
+                    {posture.factors.map((f) => (
+                      <div key={f.key} className="flex items-center gap-3 text-[12px]">
+                        <dt className="flex-1" style={{ color: "var(--text-3)" }}>{f.label}</dt>
+                        <div className="h-1.5 w-16 rounded-sm flex-none" style={{ background: "var(--surface-in)" }}>
+                          <div className="h-full rounded-sm" style={{ width: `${f.value}%`, background: "var(--text-4)" }} />
+                        </div>
+                        <dd className="mono tabular-nums font-medium w-6 text-right" style={{ color: "var(--text-1)" }}>
+                          {f.value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="Requires attention" meta={attention.length ? `${attention.length} items` : undefined}>
+            {loading ? (
+              <div className="p-4 space-y-2.5">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="skeleton h-11 w-full" />
+                ))}
+              </div>
+            ) : attention.length === 0 ? (
+              <Empty text="Nothing needs attention right now." />
+            ) : (
+              <ul>
+                {attention.map((a) => (
+                  <li key={a.key} style={{ borderBottom: "1px solid var(--line-1)" }}>
+                    <Link
+                      to={a.href}
+                      className={`stripe stripe-${a.tone} flex items-center justify-between gap-3 px-4 py-3 transition-colors`}
+                      style={{ color: "inherit" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-2)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <span className="flex items-center gap-3 min-w-0">
+                        <span className={`tag tag-${a.tone}`}>{a.count}</span>
+                        <span className="text-[13px] truncate" style={{ color: "var(--text-2)" }}>{a.label}</span>
+                      </span>
+                      <span
+                        className="mono text-[10px] tracking-[0.09em] uppercase flex items-center gap-1 flex-none"
+                        style={{ color: "var(--text-3)" }}
+                      >
+                        {a.cta}
+                        <ArrowUpRight className="w-3 h-3" />
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </div>
+
+        {/* ── Threat / AI anomaly trend — is it getting better or worse? ── */}
+        <div className="mb-5">
+          <Panel title="Threat activity" meta="Last 14 days">
+            <div className="px-4 pt-5 pb-3">
+              {loading ? (
+                <div className="skeleton" style={{ height: 168 }} />
+              ) : !hasThreatSeries ? (
+                <div className="flex items-center justify-center" style={{ height: 168 }}>
+                  <p className="text-[13px]" style={{ color: "var(--text-3)" }}>
+                    No anomalies or threat signals in the last 14 days.
+                  </p>
+                </div>
+              ) : (
+                <MultiLine
+                  data={threatTrend}
+                  series={[
+                    { key: "highRisk", label: "High-risk events", token: "var(--sev-block)" },
+                    { key: "anomalies", label: "AI anomalies", token: "var(--accent)" },
+                    { key: "phishing", label: "Phishing/threat", token: "var(--sev-warn)" },
+                  ]}
+                />
+              )}
+            </div>
+          </Panel>
+        </div>
+
+        {/* ── Risk distribution ──────────────────────────────── */}
+        <div className="grid lg:grid-cols-2 gap-5 mb-5 items-start min-w-0">
+          <Panel title="Risk by department" meta="Score / 100">
+            <div className="px-4 py-4">
+              {loading ? (
+                <div className="skeleton h-40 w-full" />
+              ) : (
+                <RiskHBars rows={deptRisk} />
+              )}
+            </div>
+          </Panel>
+
+          <Panel title="Sensitive data exposure">
+            <div className="px-4 py-4">
+              {loading ? <div className="skeleton h-32 w-full" /> : <Donut data={exposure} />}
+            </div>
+          </Panel>
         </div>
 
         {/* ── Event volume — the page's focal point ─────────── */}

@@ -54,7 +54,7 @@ export default function Navbar() {
           items: [
             { to: "/admin", icon: <LayoutDashboard className={ic} />, label: "Overview" },
             { to: "/activity", icon: <Activity className={ic} />, label: "Event stream" },
-            { to: "/ueba", icon: <TrendingUp className={ic} />, label: "Behaviour" },
+            { to: "/ueba", icon: <TrendingUp className={ic} />, label: "Behaviour UEBA" },
           ],
         },
         {
@@ -62,7 +62,7 @@ export default function Navbar() {
           items: [
             { to: "/dlp", icon: <ScanLine className={ic} />, label: "Content scanner" },
             { to: "/fingerprints", icon: <Database className={ic} />, label: "Fingerprints" },
-            { to: "/whatsapp-logs", icon: <MessageCircle className={ic} />, label: "Messaging" },
+            { to: "/whatsapp-logs", icon: <MessageCircle className={ic} />, label: "WA DLP" },
             { to: "/phishing", icon: <ShieldAlert className={ic} />, label: "Phishing checks" },
           ],
         },
@@ -82,10 +82,10 @@ export default function Navbar() {
           ],
         },
         {
-          title: "Assist",
+          title: "SDAI Bot",
           items: [
-            { to: "/ai-copilot", icon: <Brain className={ic} />, label: "Copilot" },
-            { to: "/chat", icon: <MessageSquare className={ic} />, label: "Assistant" },
+            { to: "/ai-copilot", icon: <Brain className={ic} />, label: "SD Copilot" },
+            { to: "/chat", icon: <MessageSquare className={ic} />, label: "SecureDesk AI" },
           ],
         },
       ]
@@ -107,10 +107,10 @@ export default function Navbar() {
           ],
         },
         {
-          title: "Assist",
+          title: "SDAI Bot",
           items: [
-            { to: "/ai-copilot", icon: <Brain className={ic} />, label: "Copilot" },
-            { to: "/chat", icon: <MessageSquare className={ic} />, label: "Assistant" },
+            { to: "/ai-copilot", icon: <Brain className={ic} />, label: "SD Copilot" },
+            { to: "/chat", icon: <MessageSquare className={ic} />, label: "SecureDesk AI" },
           ],
         },
       ];
