@@ -2,22 +2,17 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-
-  "//": "SPA catch-all. Without this, refreshing a client-side route like /admin makes Vercel look for a file at that path and return 404. Vercel checks the filesystem before applying rewrites, so hashed assets in /assets and files in /brand still serve directly.",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ],
-
   "headers": [
     {
-      "//": "Vite fingerprints these filenames, so they can be cached forever.",
       "source": "/assets/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
       ]
     },
     {
-      "//": "index.html must never be cached, or users get a stale app shell pointing at deleted asset hashes after a deploy.",
       "source": "/index.html",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
