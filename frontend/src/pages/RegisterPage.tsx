@@ -5,6 +5,7 @@ import api from "../api/axios";
 import { apiErrorMessage } from "../api/errors";
 import { useAuth } from "../context/AuthContext";
 import AuthShell, { AsideProof } from "../components/AuthShell";
+import RoleChoice, { type Role, toRole } from "../components/RoleChoice";
 
 /** Password strength, judged honestly — length first, variety second. */
 function strengthOf(pw: string): { score: 0 | 1 | 2 | 3; label: string } {
@@ -26,6 +27,10 @@ export default function RegisterPage() {
   const [name, setName] = useState("");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  // The role the new account is created with. Unlike the sign-in selector,
+  // this one is authoritative — the server validates it against the same
+  // three roles and stores what's chosen.
+  const [role, setRole] = useState<Role>("user");
   const [reveal, setReveal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -45,17 +50,19 @@ export default function RegisterPage() {
 
     setBusy(true);
     try {
-      // No role is sent. Permissions are granted by an administrator, never
-      // chosen by the person signing up.
       const { data } = await api.post("/auth/register", {
         name: name.trim(),
         identifier: id,
         password,
+        role,
       });
 
-      const role = (data.role || "user").toLowerCase();
-      login(data.access_token, role, data.name, data.user_id || "");
-      navigate(role === "admin" || role === "manager" ? "/admin" : "/dashboard");
+      // Trust the role the server echoes back, not the one picked here — if
+      // the server ever declines to honour the request, the UI must follow
+      // the account that was actually created.
+      const granted = toRole(data.role);
+      login(data.access_token, granted, data.name, data.user_id || "");
+      navigate(granted === "admin" || granted === "manager" ? "/admin" : "/dashboard");
     } catch (err: unknown) {
       setError(
         apiErrorMessage(err, "We couldn't create your account. Try again in a moment.")
@@ -99,6 +106,15 @@ export default function RegisterPage() {
       )}
 
       <form onSubmit={submit} className="space-y-4">
+        <RoleChoice
+          legend="Create account as"
+          value={role}
+          onChange={(r) => {
+            setRole(r);
+            setError("");
+          }}
+        />
+
         <div>
           <label htmlFor="name" className="field-label">
             Full name
@@ -209,7 +225,7 @@ export default function RegisterPage() {
 
       <ul className="mt-6 space-y-2">
         {[
-          "Your team joins by invitation from an administrator",
+          "An administrator can change any account's role later",
           "Detection runs on-device — content stays in the browser",
         ].map((t) => (
           <li key={t} className="flex items-start gap-2.5">

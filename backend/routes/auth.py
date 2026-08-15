@@ -59,13 +59,17 @@ async def admin_only(user=Depends(get_current_user)):
     return user
 
 
+# The three consoles an account can be created against. Mirrors ROLES in
+# frontend/src/components/RoleChoice.tsx — keep the two in step.
+VALID_ROLES = ("admin", "manager", "user")
+
+
 class RegisterBody(BaseModel):
     name:       str
     identifier: str
     password:   str
-    # `role` is accepted for backward compatibility with older clients but is
-    # NEVER trusted. Privileges are granted by an administrator, never claimed
-    # by the account being created. See assign below.
+    # Which console this account is created against. Validated against
+    # VALID_ROLES below; anything unrecognised falls back to "user".
     role:       str | None = None
 
 
@@ -101,13 +105,19 @@ async def register(body: RegisterBody):
             "Enter a valid email (you@gmail.com) or phone number (9876543210)"
         )
 
-    # ── Role — NEVER trusted from the request ───────────────────
-    # Self-registration always produces an unprivileged account. Elevating a
-    # user to manager/admin is an administrative action performed against an
-    # existing account; it is not something a signup payload can ask for.
-    # (Previously this endpoint stored whatever role the client sent, which
-    # allowed anyone reaching the API to create an admin account.)
-    role = "user"
+    # ── Role — chosen at signup ─────────────────────────────────
+    # Validated against the known set rather than stored verbatim, so a
+    # malformed or invented role can never reach the database; anything
+    # unrecognised (or omitted, as older clients do) becomes a plain user.
+    #
+    # NOTE: this endpoint is public, so an account can self-select
+    # administrator. That is deliberate here — the product needs all three
+    # consoles reachable without a pre-seeded admin. If this is ever exposed
+    # beyond a trusted audience, gate elevated roles behind an invitation or
+    # allow self-selected admin only while the workspace has no admin yet.
+    role = (body.role or "").strip().lower()
+    if role not in VALID_ROLES:
+        role = "user"
 
     cid = clean_identifier(ident)
 
@@ -190,7 +200,7 @@ async def login(body: LoginBody):
     stored_role = user.get("role", "user")
 
     wanted = (body.expected_role or "").strip().lower()
-    if wanted and wanted in ("admin", "manager", "user") and wanted != stored_role:
+    if wanted and wanted in VALID_ROLES and wanted != stored_role:
         label = {"admin": "an administrator", "manager": "a manager", "user": "an employee"}
         raise HTTPException(
             403,
