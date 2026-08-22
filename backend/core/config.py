@@ -22,10 +22,10 @@ import math
 import re
 from collections import Counter
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # ─────────────────────────────────────────────────────────────────────
 # Secret quality checks
@@ -150,7 +150,11 @@ class Settings(BaseSettings):
     # ── URLs / CORS ──────────────────────────────────────────────────
     FRONTEND_URL: str = ""
     BACKEND_URL: str = ""
-    CORS_ORIGINS: list[str] = []
+    # NoDecode is required: without it pydantic-settings tries to json.loads
+    # this field straight from the environment and errors on a plain
+    # comma-separated value, which is the form Render and every other host
+    # actually supply. The validator below does the parsing instead.
+    CORS_ORIGINS: Annotated[list[str], NoDecode] = []
 
     # ── Email alerts ─────────────────────────────────────────────────
     SMTP_EMAIL: str = ""
@@ -193,13 +197,14 @@ class Settings(BaseSettings):
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def _split_cors(cls, v):
-        """Accept either a JSON list or a comma-separated string."""
+        """Accept a comma-separated string, a JSON array, or a real list."""
         if v is None or v == "":
             return []
         if isinstance(v, str):
             v = v.strip()
             if v.startswith("["):
-                return v  # let pydantic parse the JSON form
+                import json
+                return json.loads(v)
             return [o.strip() for o in v.split(",") if o.strip()]
         return v
 

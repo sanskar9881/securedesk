@@ -7,6 +7,19 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
+      # ENVIRONMENT gates every production check in core/config.py — exact-origin
+      # CORS, no localhost Mongo, no error detail in responses, evidence signing
+      # key required once the chain lands. Without it set the service boots in
+      # development mode and none of those guards engage.
+      - key: ENVIRONMENT
+        value: production
+
+      # Exact origins only; core/config.py refuses a wildcard in production.
+      # Add the Chrome extension's origin (chrome-extension://<id>) here when
+      # the extension ships — it is not in this repo yet.
+      - key: CORS_ORIGINS
+        value: https://securedesk-beige.vercel.app
+
       - key: MONGODB_URL
         sync: false
       - key: SECRET_KEY
@@ -23,3 +36,16 @@ services:
         value: "1440"
       - key: FRONTEND_URL
         sync: false
+
+      # Password reset stays disabled until both are set: the reset token is a
+      # bearer credential for the account, so it is only ever delivered by
+      # email. See routes/auth.py:forgot_password.
+      # - key: SMTP_EMAIL
+      #     sync: false
+      # - key: SMTP_PASSWORD
+      #     sync: false
+
+      # RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET are deliberately absent and the
+      # billing router is unmounted in main.py. /api/billing/verify skips its
+      # signature check when the secret is empty, so mounting it without keys
+      # lets any signed-in user grant themselves a paid plan.

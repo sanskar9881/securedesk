@@ -76,7 +76,13 @@ optional_routes = [
     ("Compliance",    "routes.compliance",    "/api/compliance"),
     ("WhatsApp",      "routes.whatsapp",      "/api/whatsapp"),
     ("Onboarding",    "routes.onboarding",    "/api/onboarding"),
-    ("Billing",       "routes.billing",       "/api/billing"),
+    # ("Billing",     "routes.billing",       "/api/billing"),
+    #   Disabled: routes/billing.py reads RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET,
+    #   which are set in no environment. /verify guards its HMAC check behind
+    #   `if razorpay_secret:` — so with the secret empty the signature check is
+    #   skipped entirely and the subscription is written as verified. Any
+    #   signed-in user could grant themselves a paid plan. Re-enable only
+    #   together with real keys AND after making that check fail closed.
     ("Exports",       "routes.exports",       "/api/export"),
     ("Notifications", "routes.notifications", "/api/notifications"),
 ]
