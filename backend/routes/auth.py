@@ -1,11 +1,17 @@
+import logging
 import re, uuid, bcrypt
 from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.concurrency import run_in_threadpool
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from pydantic import BaseModel
 from database import db, users_collection, reset_tokens_collection
 from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
+from core.config import get_settings
+from services.email_alert_service import send_password_reset_email
+
+log = logging.getLogger("securedesk.auth")
 
 router = APIRouter()
 bearer = HTTPBearer()
@@ -219,28 +225,70 @@ async def login(body: LoginBody):
     }
 
 
-@router.post("/forgot-password")
+# Shown for every /forgot-password call, whatever the outcome. Constant by
+# design: a different message for a known vs unknown account turns this
+# endpoint into a user-enumeration oracle.
+_RESET_ACK = (
+    "If an account exists for that email or phone, we've sent a reset link. "
+    "Check your inbox, including spam."
+)
+
+
+@router.post("/forgot-password", status_code=202)
 async def forgot_password(body: dict):
+    """
+    Start a password reset. Always 202, always the same body.
+
+    Two holes closed here:
+
+    1. The reset token used to be returned in this response. Anyone who knew
+       a person's email or phone could mint a valid token and take the account
+       over without ever touching their inbox. The token now leaves the server
+       only by email, and is never serialised into an API response.
+    2. A missing account used to 404 while a real one returned a token, so the
+       endpoint confirmed which emails and phone numbers were registered.
+
+    Delivery is email-only. Until SMTP is configured the flow is inert and no
+    token is minted at all — a token that cannot be delivered can only leak.
+    """
+    settings = get_settings()
+
+    if not settings.password_reset_enabled:
+        # Deliberately still 202: we don't advertise which capabilities are
+        # switched off. The operator sees the real reason in the log.
+        log.warning("password reset requested but SMTP is not configured; flow is disabled")
+        return {"message": _RESET_ACK}
+
     ident = (body.get("identifier") or "").strip()
     cid   = clean_identifier(ident)
     user  = await users_collection.find_one(
         {"$or": [{"email": cid}, {"phone": cid}]}
     )
-    if not user:
-        raise HTTPException(404, "No account found")
-    tok = str(uuid.uuid4())
-    await reset_tokens_collection.insert_one({
-        "_id":        tok,
-        "user_id":    user["_id"],
-        "created_at": datetime.utcnow(),
-        "expires_at": datetime.utcnow() + timedelta(hours=1),
-        "used":       False,
-    })
-    return {"message": "Reset link created", "token": tok}
+
+    if user and user.get("email"):
+        tok = str(uuid.uuid4())
+        await reset_tokens_collection.insert_one({
+            "_id":        tok,
+            "user_id":    user["_id"],
+            "created_at": datetime.utcnow(),
+            "expires_at": datetime.utcnow() + timedelta(hours=1),
+            "used":       False,
+        })
+        reset_url = f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?token={tok}"
+        # smtplib is blocking; keep it off the event loop.
+        await run_in_threadpool(
+            send_password_reset_email, user["email"], user.get("name", "there"), reset_url
+        )
+
+    return {"message": _RESET_ACK}
 
 
 @router.post("/reset-password")
 async def reset_password(body: dict):
+    if not get_settings().password_reset_enabled:
+        raise HTTPException(
+            503, "Password reset is temporarily unavailable. Please contact your administrator."
+        )
     tok = (body.get("token") or "").strip()
     pw  = (body.get("new_password") or "").strip()
     if not tok or len(pw) < 6:

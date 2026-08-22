@@ -247,6 +247,17 @@ class Settings(BaseSettings):
         return self.ENVIRONMENT == "production"
 
     @property
+    def password_reset_enabled(self) -> bool:
+        """Password reset requires a delivery channel.
+
+        The reset token is a bearer credential for the account. If it cannot
+        be delivered out-of-band to something only the account holder reads,
+        there is no safe way to hand it out at all — so the flow stays off
+        until SMTP is configured.
+        """
+        return bool(self.SMTP_EMAIL and self.SMTP_PASSWORD)
+
+    @property
     def allowed_origins(self) -> list[str]:
         """Exact origin allowlist for CORS.
 
