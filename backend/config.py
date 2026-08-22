@@ -1,12 +1,30 @@
-import os
-from dotenv import load_dotenv
-load_dotenv()
+"""
+DEPRECATED — kept only so existing imports keep working.
 
-MONGODB_URL               = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
-DATABASE_NAME             = os.getenv("DATABASE_NAME", "cybersec_db")
-SECRET_KEY                = os.getenv("SECRET_KEY", "changeme_in_production_very_long_key")
-ALGORITHM                 = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
-ANTHROPIC_API_KEY         = os.getenv("ANTHROPIC_API_KEY", "")
-OPENAI_API_KEY            = os.getenv("OPENAI_API_KEY", "")
-FRONTEND_URL              = os.getenv("FRONTEND_URL", "")
+Real configuration now lives in `core/config.py`. This module re-exports the
+same names it always did, sourced from the validated Settings object, so
+`from config import SECRET_KEY` continues to work unchanged while call sites
+are migrated to `from core.config import get_settings`.
+
+Do not add new names here. New code should call get_settings().
+"""
+from __future__ import annotations
+
+from core.config import get_settings
+
+_s = get_settings()
+
+MONGODB_URL                 = _s.MONGODB_URL
+DATABASE_NAME               = _s.DATABASE_NAME
+SECRET_KEY                  = _s.SECRET_KEY
+ALGORITHM                   = _s.ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = _s.ACCESS_TOKEN_EXPIRE_MINUTES
+ANTHROPIC_API_KEY           = _s.ANTHROPIC_API_KEY
+OPENAI_API_KEY              = _s.OPENAI_API_KEY
+FRONTEND_URL                = _s.FRONTEND_URL
+
+__all__ = [
+    "MONGODB_URL", "DATABASE_NAME", "SECRET_KEY", "ALGORITHM",
+    "ACCESS_TOKEN_EXPIRE_MINUTES", "ANTHROPIC_API_KEY", "OPENAI_API_KEY",
+    "FRONTEND_URL",
+]
