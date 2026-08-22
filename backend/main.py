@@ -1,19 +1,15 @@
 import logging
-import os
-from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from core.config import get_settings
 from core.errors import install_error_handlers
 from core.uploads import assert_no_static_upload_route
 from routes import auth, files, admin, profile, phishing, chatbot
 
 logging.basicConfig(
-    level=os.getenv("LOG_LEVEL", "INFO"),
+    level=get_settings().LOG_LEVEL,
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
-
-# Load environment variables from .env file
-load_dotenv()
 
 def try_import(name, from_path):
     try:
@@ -26,8 +22,15 @@ def try_import(name, from_path):
 
 app = FastAPI(title="SecureDesk API", version="4.0.0")
 
-ORIGINS = ["http://localhost:5173","http://localhost:5174","http://localhost:3000","http://127.0.0.1:5173","http://127.0.0.1:5174"]
-if os.getenv("FRONTEND_URL"): ORIGINS.append(os.getenv("FRONTEND_URL"))
+settings = get_settings()
+
+# Exact origins only. There is deliberately no allow_origin_regex here: the
+# previous pattern matched any *.vercel.app / *.onrender.com / *.netlify.app
+# host, and combined with allow_credentials=True that let anyone who could
+# deploy a page to Vercel make credentialed calls against this API with a
+# signed-in user's cookies and headers. Origins now come from settings, which
+# refuses a wildcard in production.
+ORIGINS = settings.allowed_origins
 
 install_error_handlers(app)
 
@@ -52,8 +55,9 @@ async def security_headers(request: Request, call_next):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ORIGINS,
-    allow_origin_regex=r"https://.*\.(vercel\.app|onrender\.com|netlify\.app)$",
-    allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Core — always on (auth never breaks)
