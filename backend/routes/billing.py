@@ -3,6 +3,7 @@ from core.errors import safe_502
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from core.config import get_settings
 from database import db
 from routes.auth import get_current_user
 
@@ -127,10 +128,36 @@ async def create_order(body: CreateOrder, user=Depends(get_current_user)):
 
 @router.post("/verify")
 async def verify_payment(body: VerifyPayment, user=Depends(get_current_user)):
-    razorpay_secret = os.getenv("RAZORPAY_KEY_SECRET","")
+    """
+    Record a subscription against a gateway-confirmed payment.
 
-    # Demo mode verification
-    if body.razorpay_order_id.startswith("demo_"):
+    This endpoint decides whether someone has paid, so it fails closed at
+    every branch. Two ways it previously failed open:
+
+    1. The HMAC check was wrapped in `if razorpay_secret:`. With the secret
+       unset — which is every environment today — the signature was not
+       checked at all and the subscription was still written as verified.
+       A missing secret is now a hard 503: we cannot verify, so we refuse.
+
+    2. Demo mode keyed off `razorpay_order_id.startswith("demo_")`, which is
+       caller-supplied. Any signed-in user could post an order id beginning
+       "demo_" and be granted a paid plan outright — with real keys
+       configured, because the demo branch ran before the signature check.
+       Demo mode is now a server-side decision: never in production, and
+       only when no gateway credentials are configured at all.
+
+    The router is currently unmounted in main.py; self-serve checkout is off
+    the roadmap and first customers are invoiced manually. These guards are
+    what has to hold before it is ever mounted again.
+    """
+    settings = get_settings()
+    razorpay_key    = os.getenv("RAZORPAY_KEY_ID", "")
+    razorpay_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
+
+    # Demo mode: decided by server configuration only, never by the request.
+    demo_mode = not settings.is_production and not razorpay_key and not razorpay_secret
+
+    if demo_mode:
         plan_info = PLANS.get(body.plan_id, {})
         await sub_col.insert_one({
             "_id":        str(uuid.uuid4()),
@@ -146,15 +173,20 @@ async def verify_payment(body: VerifyPayment, user=Depends(get_current_user)):
         })
         return {"verified":True,"plan":body.plan_id,"message":"Demo payment recorded","demo":True}
 
-    # Real verification
-    if razorpay_secret:
-        expected = hmac.new(
-            razorpay_secret.encode(),
-            f"{body.razorpay_order_id}|{body.razorpay_payment_id}".encode(),
-            hashlib.sha256
-        ).hexdigest()
-        if not hmac.compare_digest(expected, body.razorpay_signature):
-            raise HTTPException(400, "Payment verification failed - invalid signature")
+    # No secret means no way to verify. Refuse — never skip.
+    if not razorpay_secret:
+        raise HTTPException(
+            503,
+            "Payments are not configured on this server, so this payment cannot be verified.",
+        )
+
+    expected = hmac.new(
+        razorpay_secret.encode(),
+        f"{body.razorpay_order_id}|{body.razorpay_payment_id}".encode(),
+        hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(expected, body.razorpay_signature):
+        raise HTTPException(400, "Payment verification failed - invalid signature")
 
     plan_info = PLANS.get(body.plan_id, {})
     await sub_col.insert_one({
