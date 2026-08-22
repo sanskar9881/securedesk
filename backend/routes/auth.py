@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.concurrency import run_in_threadpool
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from database import db, users_collection, reset_tokens_collection
 from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 from core.config import get_settings
@@ -65,18 +65,24 @@ async def admin_only(user=Depends(get_current_user)):
     return user
 
 
-# The three consoles an account can be created against. Mirrors ROLES in
-# frontend/src/components/RoleChoice.tsx — keep the two in step.
+# The roles an account may hold. Registration can no longer select among
+# these — see register() — but login still compares against them so someone
+# who opens the wrong console is told so plainly.
 VALID_ROLES = ("admin", "manager", "user")
+
+# The only role a public registration can ever produce.
+USER_ROLE = "user"
 
 
 class RegisterBody(BaseModel):
+    # `extra="forbid"` is the enforcement: a `role` key in the body is now a
+    # 422 rather than something we read. Registration is a public endpoint,
+    # so nothing it accepts may influence privilege.
+    model_config = ConfigDict(extra="forbid")
+
     name:       str
     identifier: str
     password:   str
-    # Which console this account is created against. Validated against
-    # VALID_ROLES below; anything unrecognised falls back to "user".
-    role:       str | None = None
 
 
 class LoginBody(BaseModel):
@@ -111,19 +117,18 @@ async def register(body: RegisterBody):
             "Enter a valid email (you@gmail.com) or phone number (9876543210)"
         )
 
-    # ── Role — chosen at signup ─────────────────────────────────
-    # Validated against the known set rather than stored verbatim, so a
-    # malformed or invented role can never reach the database; anything
-    # unrecognised (or omitted, as older clients do) becomes a plain user.
+    # ── Role — never chosen by the caller ───────────────────────
+    # Registration is public and unauthenticated, so it always produces a
+    # plain user. It previously honoured a `role` field from the request
+    # body, which meant anyone on the internet could create themselves an
+    # administrator account.
     #
-    # NOTE: this endpoint is public, so an account can self-select
-    # administrator. That is deliberate here — the product needs all three
-    # consoles reachable without a pre-seeded admin. If this is ever exposed
-    # beyond a trusted audience, gate elevated roles behind an invitation or
-    # allow self-selected admin only while the workspace has no admin yet.
-    role = (body.role or "").strip().lower()
-    if role not in VALID_ROLES:
-        role = "user"
+    # Elevation is a separate, authenticated, admin-only operation:
+    #   PATCH /api/admin/users/{user_id}/role   (see routes/admin.py)
+    # To create the very first admin in a fresh install, run
+    #   python -m scripts.promote_user <email-or-phone> admin
+    # which requires shell access to the deployment.
+    role = USER_ROLE
 
     cid = clean_identifier(ident)
 
@@ -147,7 +152,7 @@ async def register(body: RegisterBody):
     doc = {
         "_id":          uid,
         "name":         name,
-        "role":         role,   # ← stored exactly as chosen
+        "role":         role,   # always USER_ROLE — see above
         "password":     pw_hash,
         "avatar_color": "#6366f1",
         "language":     "en",
