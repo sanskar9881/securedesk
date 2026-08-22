@@ -75,14 +75,25 @@ USER_ROLE = "user"
 
 
 class RegisterBody(BaseModel):
-    # `extra="forbid"` is the enforcement: a `role` key in the body is now a
-    # 422 rather than something we read. Registration is a public endpoint,
-    # so nothing it accepts may influence privilege.
+    # Unknown fields are rejected, so the request shape stays a closed set and
+    # a future privileged field can't be smuggled in by a stale client.
     model_config = ConfigDict(extra="forbid")
 
     name:       str
     identifier: str
     password:   str
+
+    # Accepted and then ignored, deliberately.
+    #
+    # This field used to choose the new account's role, which let anyone on
+    # the internet register as an administrator. It is declared here — rather
+    # than rejected outright by extra="forbid" — only so that clients still
+    # sending it get a normal 200 and a plain user account instead of a 422.
+    # A single push can deploy frontend and backend in either order, so the
+    # backend must not depend on the frontend going first.
+    #
+    # register() never reads this. Do not start.
+    role: str | None = None
 
 
 class LoginBody(BaseModel):
@@ -121,7 +132,8 @@ async def register(body: RegisterBody):
     # Registration is public and unauthenticated, so it always produces a
     # plain user. It previously honoured a `role` field from the request
     # body, which meant anyone on the internet could create themselves an
-    # administrator account.
+    # administrator account. `body.role` is still accepted by the model for
+    # backward compatibility and is deliberately never read here.
     #
     # Elevation is a separate, authenticated, admin-only operation:
     #   PATCH /api/admin/users/{user_id}/role   (see routes/admin.py)
