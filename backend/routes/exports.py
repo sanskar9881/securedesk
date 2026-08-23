@@ -1,5 +1,5 @@
 import csv, io
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from database import db
@@ -132,7 +132,7 @@ async def log_ip(request: Request, user=Depends(get_current_user)):
         "user_id":   user["_id"],
         "user_name": user["name"],
         "ip":        ip.split(",")[0].strip(),
-        "timestamp": datetime.utcnow(),
+        "timestamp": datetime.now(timezone.utc),
         "action":    "login",
     })
     return {"logged": True, "ip": ip}

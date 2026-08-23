@@ -1,5 +1,5 @@
 import hashlib, io
-from datetime import datetime
+from datetime import datetime, timezone
 from database import fingerprints_collection
 
 
@@ -33,9 +33,9 @@ async def save_fingerprint(
     if existing:
         await fingerprints_collection.update_one(
             {"_id": file_hash},
-            {"$set":  {"last_accessed": datetime.utcnow()},
+            {"$set":  {"last_accessed": datetime.now(timezone.utc)},
              "$push": {"actions_log": {"action": "re-uploaded", "by": owner_name,
-                                       "at": datetime.utcnow().isoformat()}}}
+                                       "at": datetime.now(timezone.utc).isoformat()}}}
         )
         return True   # duplicate
 
@@ -50,9 +50,9 @@ async def save_fingerprint(
         "action_taken":  action_taken,
         "reasons":       reasons,
         "regex_findings":regex_findings,
-        "created_at":    datetime.utcnow(),
-        "last_accessed": datetime.utcnow(),
+        "created_at":    datetime.now(timezone.utc),
+        "last_accessed": datetime.now(timezone.utc),
         "actions_log":   [{"action": "uploaded", "by": owner_name,
-                           "at": datetime.utcnow().isoformat()}],
+                           "at": datetime.now(timezone.utc).isoformat()}],
     })
     return False  # new file

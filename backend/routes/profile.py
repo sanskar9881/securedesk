@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -20,7 +20,7 @@ class ProfileUpdate(BaseModel):
 
 @router.get("/me")
 async def get_profile(current_user=Depends(get_current_user)):
-    created = current_user.get("created_at", datetime.utcnow())
+    created = current_user.get("created_at", datetime.now(timezone.utc))
     created_str = created.isoformat() if hasattr(created, "isoformat") else str(created)
     
     response = {
@@ -82,7 +82,7 @@ async def update_profile(body: ProfileUpdate, current_user=Depends(get_current_u
         )
 
     updated = await users_collection.find_one({"_id": current_user["_id"]})
-    created = updated.get("created_at", datetime.utcnow())
+    created = updated.get("created_at", datetime.now(timezone.utc))
     created_str = created.isoformat() if hasattr(created, "isoformat") else str(created)
     return {
         "id": updated["_id"],

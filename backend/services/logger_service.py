@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from database import activity_collection, alerts_collection
 
 
@@ -24,7 +24,7 @@ async def log_event(
         "risk_level":   risk_level,
         "action_taken": action_taken,
         "reasons":      reasons or [],
-        "timestamp":    datetime.utcnow(),
+        "timestamp":    datetime.now(timezone.utc),
         **(extra or {}),
     }
     await activity_collection.insert_one(doc)
@@ -39,7 +39,7 @@ async def log_event(
             "message":   f"High-risk {action} by {user_name}: {filename or 'unknown file'}",
             "filename":  filename,
             "read":      False,
-            "timestamp": datetime.utcnow(),
+            "timestamp": datetime.now(timezone.utc),
         })
 
     return doc["_id"]

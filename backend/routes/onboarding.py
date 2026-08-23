@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from database import db
@@ -67,7 +67,7 @@ async def sign_nda(body: NDASigning, user=Depends(get_current_user)):
         }
 
     agreement_id = str(uuid.uuid4())
-    signed_at    = datetime.utcnow()
+    signed_at    = datetime.now(timezone.utc)
 
     await nda_col.insert_one({
         "_id":         agreement_id,
@@ -131,7 +131,7 @@ async def complete_onboarding(body: OnboardingComplete, user=Depends(get_current
         "manager_name": body.manager_name,
         "start_date":   body.start_date,
         "nda_signed":   True,
-        "completed_at": datetime.utcnow(),
+        "completed_at": datetime.now(timezone.utc),
         "org_id":       user.get("org_id",""),
     })
     return {"onboarding_complete": True, "message": "Welcome! Your account is fully set up."}

@@ -1,6 +1,6 @@
 import os, uuid, hmac, hashlib
 from core.errors import safe_502
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from core.config import get_settings
@@ -74,7 +74,7 @@ async def get_subscription(user=Depends(get_current_user)):
     expires = sub.get("expires_at")
     return {
         "plan":       sub.get("plan","trial"),
-        "status":     "active" if not expires or expires > datetime.utcnow() else "expired",
+        "status":     "active" if not expires or expires > datetime.now(timezone.utc) else "expired",
         "expires":    expires.isoformat() if isinstance(expires,datetime) else None,
         "payment_id": sub.get("payment_id",""),
         "created_at": sub["created_at"].isoformat() if hasattr(sub.get("created_at"),"isoformat") else "",
@@ -167,8 +167,8 @@ async def verify_payment(body: VerifyPayment, user=Depends(get_current_user)):
             "payment_id": "demo_payment",
             "order_id":   body.razorpay_order_id,
             "amount":     plan_info.get("price_inr",0),
-            "created_at": datetime.utcnow(),
-            "expires_at": datetime.utcnow() + timedelta(days=30),
+            "created_at": datetime.now(timezone.utc),
+            "expires_at": datetime.now(timezone.utc) + timedelta(days=30),
             "demo":       True,
         })
         return {"verified":True,"plan":body.plan_id,"message":"Demo payment recorded","demo":True}
@@ -197,8 +197,8 @@ async def verify_payment(body: VerifyPayment, user=Depends(get_current_user)):
         "payment_id": body.razorpay_payment_id,
         "order_id":   body.razorpay_order_id,
         "amount":     plan_info.get("price_inr",0),
-        "created_at": datetime.utcnow(),
-        "expires_at": datetime.utcnow() + timedelta(days=30),
+        "created_at": datetime.now(timezone.utc),
+        "expires_at": datetime.now(timezone.utc) + timedelta(days=30),
     })
     await pay_col.insert_one({
         "_id":        str(uuid.uuid4()),
@@ -206,6 +206,6 @@ async def verify_payment(body: VerifyPayment, user=Depends(get_current_user)):
         "payment_id": body.razorpay_payment_id,
         "plan":       body.plan_id,
         "amount":     plan_info.get("price_inr",0),
-        "timestamp":  datetime.utcnow(),
+        "timestamp":  datetime.now(timezone.utc),
     })
     return {"verified":True,"plan":body.plan_id,"message":f"Payment successful! You are now on {plan_info.get('name','?')} plan."}

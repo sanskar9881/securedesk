@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, UploadFile, File, Form, BackgroundTasks
 from pydantic import BaseModel
 from database import db, fingerprints_collection, activity_collection, alerts_collection
@@ -188,7 +188,7 @@ async def mark_alert_read(alert_id: str, user=Depends(get_current_user)):
     result = await alerts_collection.update_one(
         q, {"$set": {"read": True,
                      "read_by": user["name"],
-                     "read_at": datetime.utcnow()}}
+                     "read_at": datetime.now(timezone.utc)}}
     )
     if result.matched_count == 0:
         from fastapi import HTTPException

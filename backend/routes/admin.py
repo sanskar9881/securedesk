@@ -1,6 +1,6 @@
 import csv
 import io
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -36,7 +36,7 @@ async def get_stats(user=Depends(require_staff)):
     suspicious = await transactions_collection.count_documents(within({"classification": "suspicious"}))
     legitimate = await transactions_collection.count_documents(within({"classification": "legitimate"}))
     high_risk = await transactions_collection.count_documents(within({"severity": "high"}))
-    week_ago = datetime.utcnow() - timedelta(days=7)
+    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
     recent = await transactions_collection.count_documents(within({"timestamp": {"$gte": week_ago}}))
 
     ids = await visible_user_ids(user)

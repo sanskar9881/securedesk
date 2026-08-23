@@ -1,5 +1,5 @@
 import os, uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from database import db
@@ -82,7 +82,7 @@ def local_fallback(msg: str, name: str) -> str:
 async def create_conv(body: ConvCreate, user=Depends(get_current_user)):
     cid = str(uuid.uuid4())
     await chat_col.insert_one({"_id":cid,"user_id":user["_id"],"user_name":user["name"],
-        "title":body.title,"messages":[],"created_at":datetime.utcnow(),"updated_at":datetime.utcnow()})
+        "title":body.title,"messages":[],"created_at":datetime.now(timezone.utc),"updated_at":datetime.now(timezone.utc)})
     return {"conversation_id":cid,"title":body.title}
 
 
@@ -116,7 +116,7 @@ async def send_msg(cid:str, body:MsgIn, user=Depends(get_current_user)):
 
     messages = doc.get("messages",[])
     user_msg = {"id":str(uuid.uuid4()),"role":"user",
-                "content":body.message,"timestamp":datetime.utcnow().isoformat()}
+                "content":body.message,"timestamp":datetime.now(timezone.utc).isoformat()}
     messages.append(user_msg)
 
     history = [{"role":m["role"],"content":m["content"]}
@@ -127,7 +127,7 @@ async def send_msg(cid:str, body:MsgIn, user=Depends(get_current_user)):
         ai_text = local_fallback(body.message, user.get("name","there"))
 
     ai_msg = {"id":str(uuid.uuid4()),"role":"assistant",
-              "content":ai_text,"timestamp":datetime.utcnow().isoformat()}
+              "content":ai_text,"timestamp":datetime.now(timezone.utc).isoformat()}
     messages.append(ai_msg)
 
     title = doc.get("title","New Conversation")
@@ -135,7 +135,7 @@ async def send_msg(cid:str, body:MsgIn, user=Depends(get_current_user)):
         title = body.message[:50] + ("..." if len(body.message)>50 else "")
 
     await chat_col.update_one({"_id":cid},
-        {"$set":{"messages":messages,"title":title,"updated_at":datetime.utcnow()}})
+        {"$set":{"messages":messages,"title":title,"updated_at":datetime.now(timezone.utc)}})
     return {"user_message":user_msg,"assistant_message":ai_msg,"conversation_id":cid}
 
 

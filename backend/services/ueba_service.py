@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from database import db
 
 activity_col = db["activity_logs"]
@@ -8,7 +8,7 @@ alerts_col   = db["alerts"]
 
 async def get_user_baseline(user_id: str) -> dict:
     """Calculate normal behavior for a user from last 30 days of logs."""
-    since  = datetime.utcnow() - timedelta(days=30)
+    since  = datetime.now(timezone.utc) - timedelta(days=30)
     cursor = activity_col.find({
         "user_id": user_id,
         "timestamp": {"$gte": since}
@@ -43,7 +43,7 @@ async def check_anomalies(user_id: str, user_name: str, action: str,
     """
     anomalies = []
     baseline  = await get_user_baseline(user_id)
-    now       = datetime.utcnow()
+    now       = datetime.now(timezone.utc)
 
     # Anomaly 1 — After-hours activity
     if now.hour < 7 or now.hour > 21:
@@ -94,7 +94,7 @@ async def get_ueba_dashboard(org_id: str = None) -> dict:
     q = {}
     if org_id:
         q["org_id"] = org_id
-    since  = datetime.utcnow() - timedelta(days=7)
+    since  = datetime.now(timezone.utc) - timedelta(days=7)
     recent = await activity_col.count_documents({**q, "timestamp": {"$gte": since}})
     alerts = await alerts_col.count_documents({"type": "UEBA_ANOMALY", "read": False})
     high_risk_users = []

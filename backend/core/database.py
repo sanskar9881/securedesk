@@ -28,6 +28,7 @@ migrated to repositories in Phase 2. Do not use them in new code.
 from __future__ import annotations
 
 import logging
+from datetime import timezone
 from typing import Any
 
 import certifi
@@ -53,17 +54,29 @@ def _build_client(url: str) -> AsyncIOMotorClient:
     stock macOS both lack the roots Atlas presents. That absence is what
     tlsAllowInvalidCertificates=True used to paper over, disabling
     verification entirely. TLS without verification is not TLS.
+
+    tz_aware=True and tzinfo=timezone.utc make the driver hand back
+    timezone-aware datetimes on every read, not just accept them on write.
+    BSON always stores UTC; PyMongo's default is to decode it back as a
+    *naive* datetime, silently stripping the tzinfo. Without this, storing
+    `datetime.now(timezone.utc)` would still round-trip into a naive value,
+    and the first comparison against a fresh aware datetime elsewhere in
+    the app — e.g. an expiry check — would raise TypeError. This is what
+    makes invariant #4 (all timestamps UTC, timezone-aware) hold all the
+    way through a read, not just at the point of writing.
     """
     if "mongodb+srv" in url or "mongodb.net" in url:
         return AsyncIOMotorClient(
             url,
             tls=True,
             tlsCAFile=certifi.where(),
+            tz_aware=True,
+            tzinfo=timezone.utc,
             serverSelectionTimeoutMS=30000,
             connectTimeoutMS=30000,
             socketTimeoutMS=30000,
         )
-    return AsyncIOMotorClient(url)
+    return AsyncIOMotorClient(url, tz_aware=True, tzinfo=timezone.utc)
 
 
 async def connect() -> AsyncIOMotorDatabase:

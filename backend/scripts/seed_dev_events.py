@@ -19,7 +19,7 @@ import os
 import random
 import sys
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -74,7 +74,7 @@ def main() -> None:
         return
 
     random.seed(7)  # reproducible
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     docs = []
     for _ in range(args.count):
         # Weight recent days more heavily, and weekdays more than weekends.

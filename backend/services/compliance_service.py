@@ -1,5 +1,5 @@
 import io
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from database import db
 
 files_col    = db["fingerprinted_files"]
@@ -10,7 +10,7 @@ users_col    = db["users"]
 
 async def gather_compliance_data(org_name: str, period_days: int = 30) -> dict:
     """Collect all data needed for the compliance report."""
-    since = datetime.utcnow() - timedelta(days=period_days)
+    since = datetime.now(timezone.utc) - timedelta(days=period_days)
     total_files  = await files_col.count_documents({})
     high_risk    = await files_col.count_documents({"risk_level": "HIGH"})
     medium_risk  = await files_col.count_documents({"risk_level": "MEDIUM"})
@@ -24,7 +24,7 @@ async def gather_compliance_data(org_name: str, period_days: int = 30) -> dict:
     high_risk_files = []
     cursor = files_col.find({"risk_level": "HIGH"}, sort=[("created_at", -1)]).limit(10)
     async for f in cursor:
-        ts = f.get("created_at", datetime.utcnow())
+        ts = f.get("created_at", datetime.now(timezone.utc))
         high_risk_files.append({
             "filename":   f.get("filename", "?"),
             "owner":      f.get("owner_name", "?"),
@@ -35,7 +35,7 @@ async def gather_compliance_data(org_name: str, period_days: int = 30) -> dict:
 
     return {
         "org_name":        org_name,
-        "report_date":     datetime.utcnow().strftime("%d %B %Y"),
+        "report_date":     datetime.now(timezone.utc).strftime("%d %B %Y"),
         "period":          f"Last {period_days} days",
         "total_files":     total_files,
         "high_risk":       high_risk,

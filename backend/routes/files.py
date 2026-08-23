@@ -1,7 +1,7 @@
 import uuid
 import re
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, UploadFile, File, Form
@@ -239,7 +239,7 @@ async def send_file(
         "suspicious_keywords": result["suspicious_keywords"],
         "content_analysis": content_analysis,
         "risk_reasons": risk_reasons[:8],
-        "timestamp": datetime.utcnow(),
+        "timestamp": datetime.now(timezone.utc),
         "type": "file_transaction",
     }
 

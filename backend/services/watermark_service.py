@@ -4,7 +4,7 @@ Every file gets stamped with: owner, company, timestamp, unique ID.
 If file leaks, we can prove who shared it and when.
 """
 import io, uuid, hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -21,7 +21,7 @@ def watermark_pdf(content: bytes, owner_name: str, company: str, file_id: str) -
             "/SecureDesk_Owner":   owner_name,
             "/SecureDesk_Company": company, 
             "/SecureDesk_FileID":  file_id,
-            "/SecureDesk_Stamped": datetime.utcnow().isoformat(),
+            "/SecureDesk_Stamped": datetime.now(timezone.utc).isoformat(),
             "/SecureDesk_Hash":    hashlib.sha256(content).hexdigest()[:16],
         })
         out = io.BytesIO()
@@ -38,7 +38,7 @@ def watermark_docx(content: bytes, owner_name: str, company: str, file_id: str) 
         doc = docx.Document(_io.BytesIO(content))
         # Add to core properties
         doc.core_properties.author   = f"{owner_name} | {company}"
-        doc.core_properties.comments = f"SecureDesk ID:{file_id} | {datetime.utcnow().isoformat()}"
+        doc.core_properties.comments = f"SecureDesk ID:{file_id} | {datetime.now(timezone.utc).isoformat()}"
         doc.core_properties.keywords = f"securedesk:{file_id}"
         out = _io.BytesIO()
         doc.save(out)
@@ -56,7 +56,7 @@ def add_visible_watermark_text(content: bytes, filename: str,
         from reportlab.lib.pagesizes import A4
         reader  = PyPDF2.PdfReader(io.BytesIO(content))
         writer  = PyPDF2.PdfWriter()
-        wm_text = f"CONFIDENTIAL | {owner_name} | {company} | {datetime.utcnow().strftime('%Y-%m-%d')}"
+        wm_text = f"CONFIDENTIAL | {owner_name} | {company} | {datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
         for page in reader.pages:
             packet = io.BytesIO()
             c = canvas.Canvas(packet, pagesize=A4)

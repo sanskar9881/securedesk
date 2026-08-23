@@ -1,6 +1,6 @@
 import logging
 import re, uuid, bcrypt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.concurrency import run_in_threadpool
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -28,7 +28,7 @@ def clean_identifier(s: str) -> str:
 
 
 def make_token(user_id: str, role: str) -> str:
-    exp = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    exp = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     return jwt.encode({"sub": user_id, "role": role, "exp": exp},
                       SECRET_KEY, algorithm=ALGORITHM)
 
@@ -168,7 +168,7 @@ async def register(body: RegisterBody):
         "password":     pw_hash,
         "avatar_color": "#6366f1",
         "language":     "en",
-        "created_at":   datetime.utcnow(),
+        "created_at":   datetime.now(timezone.utc),
         "dob":          "",
         "email":        cid if has_at    else "",
         "phone":        cid if is_digits else "",
@@ -287,8 +287,8 @@ async def forgot_password(body: dict):
         await reset_tokens_collection.insert_one({
             "_id":        tok,
             "user_id":    user["_id"],
-            "created_at": datetime.utcnow(),
-            "expires_at": datetime.utcnow() + timedelta(hours=1),
+            "created_at": datetime.now(timezone.utc),
+            "expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
             "used":       False,
         })
         reset_url = f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?token={tok}"
@@ -311,7 +311,7 @@ async def reset_password(body: dict):
     if not tok or len(pw) < 6:
         raise HTTPException(400, "Token and password (min 6 chars) required")
     doc = await reset_tokens_collection.find_one({"_id": tok, "used": False})
-    if not doc or doc["expires_at"] < datetime.utcnow():
+    if not doc or doc["expires_at"] < datetime.now(timezone.utc):
         raise HTTPException(400, "Invalid or expired token")
     ph = bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
     await users_collection.update_one(

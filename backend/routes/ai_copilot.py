@@ -4,7 +4,7 @@ POST /api/ai/query         — natural language query
 GET  /api/ai/query/history — past queries
 """
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from database import db, fingerprints_collection, activity_collection
@@ -41,7 +41,7 @@ async def _build_context(intent: dict, user: dict) -> str:
     is_admin = user.get("role") in ("admin", "manager")
     parts, tq = [], {}
     if intent["days"]:
-        tq = {"$gte": datetime.utcnow() - timedelta(days=intent["days"])}
+        tq = {"$gte": datetime.now(timezone.utc) - timedelta(days=intent["days"])}
 
     if intent["files"]:
         fq = {} if is_admin else {"owner_id": user["_id"]}
@@ -80,9 +80,9 @@ async def ai_query(body: QueryIn, user=Depends(get_current_user)):
     answer  = await copilot_answer(body.question, context, user["name"])
     await db["copilot_queries"].insert_one({
         "_id": str(uuid.uuid4()), "user_id": user["_id"], "user_name": user["name"],
-        "question": body.question, "answer": answer[:600], "timestamp": datetime.utcnow(),
+        "question": body.question, "answer": answer[:600], "timestamp": datetime.now(timezone.utc),
     })
-    return {"question": body.question, "answer": answer, "timestamp": datetime.utcnow().isoformat()}
+    return {"question": body.question, "answer": answer, "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 @router.get("/query/history")

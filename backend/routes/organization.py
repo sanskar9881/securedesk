@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 from database import db
@@ -38,7 +38,7 @@ async def create_org(body: OrgCreate, user=Depends(get_current_user)):
         "size":      body.size,
         "owner_id":  user["_id"],
         "owner_name":user["name"],
-        "created_at":datetime.utcnow(),
+        "created_at":datetime.now(timezone.utc),
         "plan":      "trial",
         "members":   [{"user_id": user["_id"], "name": user["name"], "role": "admin"}],
     })
@@ -82,7 +82,7 @@ async def invite_employee(body: InviteEmployee, user=Depends(get_current_user)):
         "email":      body.email,
         "role":       body.role,
         "status":     "pending",
-        "created_at": datetime.utcnow(),
+        "created_at": datetime.now(timezone.utc),
     })
 
     return {
@@ -106,7 +106,7 @@ async def get_members(user=Depends(get_current_user)):
             "name":     u.get("name",""),
             "role":     u.get("role","user"),
             "email":    u.get("email",""),
-            "created_at": u.get("created_at", datetime.utcnow()).isoformat() if hasattr(u.get("created_at"), "isoformat") else "",
+            "created_at": u.get("created_at", datetime.now(timezone.utc)).isoformat() if hasattr(u.get("created_at"), "isoformat") else "",
         })
     return out
 

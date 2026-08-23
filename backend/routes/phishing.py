@@ -1,6 +1,6 @@
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -118,7 +118,7 @@ async def check_phishing(body: PhishingCheck, current_user=Depends(get_current_u
         "severity": result["severity"],
         "threats": result["threats"],
         "type": "phishing_check",
-        "timestamp": datetime.utcnow(),
+        "timestamp": datetime.now(timezone.utc),
     }
     await transactions_collection.insert_one(log)
 

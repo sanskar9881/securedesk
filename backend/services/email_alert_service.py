@@ -1,7 +1,7 @@
 import os, smtplib, ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def send_alert_email(
@@ -28,7 +28,7 @@ def send_alert_email(
 <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
   <div style="background:linear-gradient(135deg,#0f172a,#1e3a5f);color:#fff;padding:24px;border-radius:12px 12px 0 0">
     <h1 style="margin:0;font-size:20px">🛡️ SecureDesk Security Alert</h1>
-    <p style="margin:8px 0 0;opacity:.7;font-size:14px">{datetime.utcnow().strftime('%d %b %Y, %H:%M')} UTC</p>
+    <p style="margin:8px 0 0;opacity:.7;font-size:14px">{datetime.now(timezone.utc).strftime('%d %b %Y, %H:%M')} UTC</p>
   </div>
   <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-top:none">
     <p style="font-size:16px">Hi <strong>{manager_name}</strong>,</p>

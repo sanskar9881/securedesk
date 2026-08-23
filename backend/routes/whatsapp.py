@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from database import db
@@ -48,7 +48,7 @@ async def scan_whatsapp_share(body: WAScanRequest, user=Depends(get_current_user
         "reasons":    reasons,
         "findings":   findings,
         "llm":        llm,
-        "timestamp":  datetime.utcnow(),
+        "timestamp":  datetime.now(timezone.utc),
         "flagged":    risk_level in ("HIGH","MEDIUM"),
     }
     await wa_col.insert_one(log_doc)
@@ -64,7 +64,7 @@ async def scan_whatsapp_share(body: WAScanRequest, user=Depends(get_current_user
         "action_taken": action,
         "reasons":      reasons,
         "platform":     "WhatsApp Web",
-        "timestamp":    datetime.utcnow(),
+        "timestamp":    datetime.now(timezone.utc),
     })
 
     return {
