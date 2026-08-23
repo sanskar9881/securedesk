@@ -1,7 +1,10 @@
 import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from core.config import get_settings
+from core.database import connect, disconnect
 from core.errors import install_error_handlers
 from core.uploads import assert_no_static_upload_route
 from routes import auth, files, admin, profile, phishing, chatbot
@@ -10,6 +13,7 @@ logging.basicConfig(
     level=get_settings().LOG_LEVEL,
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
+log = logging.getLogger("securedesk")
 
 def try_import(name, from_path):
     try:
@@ -17,10 +21,38 @@ def try_import(name, from_path):
         mod = importlib.import_module(from_path)
         return mod.router, True
     except Exception as e:
-        print(f"[WARN] {name} not loaded: {e}")
+        log.warning("%s not loaded: %s", name, e)
         return None, False
 
-app = FastAPI(title="SecureDesk API", version="4.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Own the process-wide resources: open on boot, close on shutdown.
+
+    Replaces @app.on_event("startup"), which had no matching shutdown — the
+    Mongo connection was dropped rather than closed. The client is also no
+    longer built as an import-time side effect, so a bad URI now surfaces
+    as a startup error instead of an import traceback.
+    """
+    # Fails loudly if anyone ever mounts StaticFiles: uploaded content must
+    # never become a fetchable URL.
+    assert_no_static_upload_route(app)
+
+    await connect()
+
+    try:
+        from ml.classifier import _get_model
+        _get_model()
+    except Exception as e:
+        log.warning("ML model unavailable: %s", e)
+
+    log.info("SecureDesk v4.0 running (%s)", get_settings().ENVIRONMENT)
+    try:
+        yield
+    finally:
+        await disconnect()
+
+
+app = FastAPI(title="SecureDesk API", version="4.0.0", lifespan=lifespan)
 
 settings = get_settings()
 
@@ -91,18 +123,6 @@ for name, module_path, prefix in optional_routes:
     router, ok = try_import(name, module_path)
     if ok:
         app.include_router(router, prefix=prefix, tags=[name])
-
-@app.on_event("startup")
-async def startup():
-    # Fails loudly if anyone ever mounts StaticFiles: uploaded content must
-    # never become a fetchable URL.
-    assert_no_static_upload_route(app)
-    try:
-        from ml.classifier import _get_model
-        _get_model()
-    except Exception as e:
-        print(f"[WARN] ML model: {e}")
-    print("SecureDesk v4.0 running — auth always active")
 
 @app.get("/")
 async def root():

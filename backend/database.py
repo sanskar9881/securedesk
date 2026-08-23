@@ -1,38 +1,39 @@
-import certifi
-from motor.motor_asyncio import AsyncIOMotorClient
-from config import MONGODB_URL, DATABASE_NAME
+"""
+DEPRECATED — kept only so existing imports keep working.
 
+The connection now lives in `core/database.py`, created in the FastAPI
+lifespan rather than as an import-time side effect. This module re-exports
+the same names it always did, as lazy proxies that resolve on first use.
 
-def create_client(url: str) -> AsyncIOMotorClient:
-    """Connect to Mongo, verifying the server certificate.
+New code must not import from here. Use the dependency in routes:
 
-    tlsAllowInvalidCertificates used to be set here, which disabled
-    certificate validation entirely and left every query — credentials,
-    user records, activity logs — open to a machine-in-the-middle on the
-    path to Atlas. TLS without verification is not TLS.
+    from core.database import get_db
+    async def handler(db = Depends(get_db)): ...
 
-    tlsCAFile is pinned to the certifi bundle because the system trust
-    store is what was missing in the first place — Render's slim Python
-    image and stock macOS both ship without the roots Atlas presents, and
-    that failure is what the disabled check was papering over.
-    """
-    if "mongodb+srv" in url or "mongodb.net" in url:
-        return AsyncIOMotorClient(
-            url,
-            tls=True,
-            tlsCAFile=certifi.where(),
-            serverSelectionTimeoutMS=30000,
-            connectTimeoutMS=30000,
-            socketTimeoutMS=30000,
-        )
-    return AsyncIOMotorClient(url)
+or the accessor in services and scripts:
 
-client = create_client(MONGODB_URL)
-db     = client[DATABASE_NAME]
+    from core.database import get_database
 
-users_collection          = db["users"]
-transactions_collection   = db["transactions"]
-reset_tokens_collection   = db["reset_tokens"]
-fingerprints_collection   = db["fingerprinted_files"]
-activity_collection       = db["activity_logs"]
-alerts_collection         = db["alerts"]
+Phase 2 replaces every call site below with a repository, after which this
+module is deleted.
+"""
+from __future__ import annotations
+
+from core.database import db
+
+users_collection        = db["users"]
+transactions_collection = db["transactions"]
+reset_tokens_collection = db["reset_tokens"]
+fingerprints_collection = db["fingerprinted_files"]
+activity_collection     = db["activity_logs"]
+alerts_collection       = db["alerts"]
+
+__all__ = [
+    "db",
+    "users_collection",
+    "transactions_collection",
+    "reset_tokens_collection",
+    "fingerprints_collection",
+    "activity_collection",
+    "alerts_collection",
+]

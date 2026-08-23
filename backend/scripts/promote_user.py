@@ -37,7 +37,12 @@ def _clean(identifier: str) -> str:
 
 
 async def promote(identifier: str, role: str) -> int:
-    from database import users_collection
+    # Scripts run outside the app lifespan, so they open the connection
+    # themselves. Without this the collection handles raise.
+    from core.database import connect, disconnect, get_database
+
+    await connect()
+    users_collection = get_database()["users"]
 
     cid = _clean(identifier)
     user = await users_collection.find_one(
@@ -45,15 +50,18 @@ async def promote(identifier: str, role: str) -> int:
     )
     if not user:
         print(f"No account found for {identifier!r}.")
+        await disconnect()
         return 1
 
     previous = user.get("role", "user")
     if previous == role:
         print(f"{user.get('name', identifier)} is already {role}. Nothing to do.")
+        await disconnect()
         return 0
 
     await users_collection.update_one({"_id": user["_id"]}, {"$set": {"role": role}})
     print(f"{user.get('name', identifier)} ({user['_id']}): {previous} -> {role}")
+    await disconnect()
     return 0
 
 

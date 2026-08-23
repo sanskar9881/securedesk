@@ -38,20 +38,20 @@ SET = {"$nin": [None, ""]}
 
 async def audit() -> None:
     settings = get_settings()
-    from motor.motor_asyncio import AsyncIOMotorClient
+    # Scripts run outside the app lifespan and open the connection themselves.
+    from core.database import connect, disconnect, get_database
 
     host = settings.MONGODB_URL.split("@")[-1].split("/")[0]
     print(f"database : {settings.DATABASE_NAME} @ {host}")
     print(f"env      : {settings.ENVIRONMENT}\n")
 
-    client = AsyncIOMotorClient(settings.MONGODB_URL, serverSelectionTimeoutMS=8000)
     try:
-        await client.admin.command("ping")
+        await connect()
+        db = get_database()
+        await db.command("ping")
     except Exception as exc:
         print(f"UNREACHABLE: {type(exc).__name__}: {str(exc)[:200]}")
         return
-
-    db = client[settings.DATABASE_NAME]
     names = sorted(await db.list_collection_names())
 
     # ── users ────────────────────────────────────────────────────────
@@ -113,7 +113,7 @@ async def audit() -> None:
     else:
         print("\nORGANIZATIONS: collection does not exist")
 
-    client.close()
+    await disconnect()
 
 
 if __name__ == "__main__":
