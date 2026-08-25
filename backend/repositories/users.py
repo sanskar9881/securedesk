@@ -4,18 +4,19 @@ UsersRepository — the one collection with a documented exception.
 Once a caller knows their org_id, every user operation goes through
 UsersRepository(db, org_id) like any other tenant-scoped repository.
 
-The exception is login itself: at that point in the request, the org_id is
-unknown — resolving *which* org a person belongs to is exactly what
-authentication does, by looking them up by email or phone across every
-tenant. That single lookup is inherently pre-tenant and cannot be scoped.
-It is pulled out as `find_by_identifier`, a module-level function taking a
-raw `db` handle rather than a repository method, specifically so it cannot
-be reached by calling a method on a scoped instance — the only caller of
-this function should ever be the authentication path in routes/auth.py.
+The exception is identity resolution itself — register, login, loading the
+user behind a bearer token, password reset — all of which run before org_id
+is known, some of them (login) precisely *because* resolving which org a
+person belongs to is what authentication does. That surface is grouped
+below as `PreTenantAccounts`, a plain class over a raw `db` handle rather
+than a TenantScopedRepository, so it's structurally impossible to construct
+it "scoped" and easy to see at a glance that it's the deliberate exception,
+not an oversight. Its only caller should be routes/auth.py.
 
-Do not add a second unscoped lookup to this module for convenience. If a
-route needs to find a user without knowing the org first, that route is
-missing a step, not missing a repository method.
+Do not add a new method here for convenience. If a route needs to find a
+user without knowing the org first, that route is missing a step (call
+get_current_user / get_tenant_id like everything else), not missing a
+repository method.
 """
 from __future__ import annotations
 
@@ -38,11 +39,37 @@ class UsersRepository(TenantScopedRepository):
         return result.modified_count > 0
 
 
+class PreTenantAccounts:
+    """Identity resolution before org_id exists. See module docstring."""
+
+    def __init__(self, db: AsyncIOMotorDatabase):
+        self.collection = db["users"]
+
+    async def find_by_identifier(self, cid: str, raw_identifier: str) -> dict | None:
+        """Login lookup: email or phone, across every tenant — that's the point."""
+        return await self.collection.find_one({
+            "$or": [
+                {"email": cid}, {"phone": cid},
+                {"email": raw_identifier.lower()}, {"phone": raw_identifier},
+            ]
+        })
+
+    async def find_by_id(self, user_id: str) -> dict | None:
+        """Loading the account behind a bearer token. Org isn't known until
+        after this returns — that's what ensure_personal_org resolves next."""
+        return await self.collection.find_one({"_id": user_id})
+
+    async def insert(self, doc: dict) -> None:
+        await self.collection.insert_one(doc)
+
+    async def set_org_id(self, user_id: str, org_id: str) -> None:
+        await self.collection.update_one({"_id": user_id}, {"$set": {"org_id": org_id}})
+
+    async def set_password_hash(self, user_id: str, password_hash: str) -> None:
+        await self.collection.update_one({"_id": user_id}, {"$set": {"password": password_hash}})
+
+
+# Backward-compatible free function — same lookup, old call shape. Kept only
+# until any remaining caller is updated to PreTenantAccounts directly.
 async def find_by_identifier(db: AsyncIOMotorDatabase, cid: str, raw_identifier: str) -> dict | None:
-    """Pre-tenant lookup for authentication only. See module docstring."""
-    return await db["users"].find_one({
-        "$or": [
-            {"email": cid}, {"phone": cid},
-            {"email": raw_identifier.lower()}, {"phone": raw_identifier},
-        ]
-    })
+    return await PreTenantAccounts(db).find_by_identifier(cid, raw_identifier)

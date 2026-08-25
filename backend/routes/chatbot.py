@@ -1,12 +1,14 @@
-import os, uuid
+import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from database import db
+from core.config import get_settings
+from core.database import get_db
+from core.dependencies import get_tenant_id
+from repositories.chats import ChatsRepository
 from routes.auth import get_current_user
 
 router   = APIRouter()
-chat_col = db["chats"]
 
 SYSTEM = """You are SecureDesk AI — a smart helpful assistant like ChatGPT.
 Answer ANYTHING the user asks. Not limited to security.
@@ -26,8 +28,9 @@ async def call_ai(history: list) -> str | None:
     msgs = [{"role": m["role"], "content": m["content"]}
             for m in history if m["role"] in ("user","assistant")]
 
+    settings = get_settings()
     # Try Anthropic
-    key = os.getenv("ANTHROPIC_API_KEY","")
+    key = settings.ANTHROPIC_API_KEY
     if key and len(key) > 20 and not key.startswith("your_"):
         try:
             import httpx
@@ -44,7 +47,7 @@ async def call_ai(history: list) -> str | None:
             print(f"Anthropic error: {e}")
 
     # Try OpenAI
-    key2 = os.getenv("OPENAI_API_KEY","")
+    key2 = settings.OPENAI_API_KEY
     if key2 and len(key2) > 20 and not key2.startswith("your_"):
         try:
             from openai import AsyncOpenAI
@@ -79,16 +82,22 @@ def local_fallback(msg: str, name: str) -> str:
 
 
 @router.post("/conversation")
-async def create_conv(body: ConvCreate, user=Depends(get_current_user)):
+async def create_conv(
+    body: ConvCreate, user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
     cid = str(uuid.uuid4())
-    await chat_col.insert_one({"_id":cid,"user_id":user["_id"],"user_name":user["name"],
+    await ChatsRepository(db, org_id).insert_one({"_id":cid,"user_id":user["_id"],"user_name":user["name"],
         "title":body.title,"messages":[],"created_at":datetime.now(timezone.utc),"updated_at":datetime.now(timezone.utc)})
     return {"conversation_id":cid,"title":body.title}
 
 
 @router.get("/conversations")
-async def list_convs(user=Depends(get_current_user)):
-    cur = chat_col.find({"user_id":user["_id"]},sort=[("updated_at",-1)]).limit(20)
+async def list_convs(
+    user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
+    cur = ChatsRepository(db, org_id).find_many({"user_id":user["_id"]},sort=[("updated_at",-1)]).limit(20)
     out = []
     async for d in cur:
         d["_id"] = str(d["_id"])
@@ -100,8 +109,11 @@ async def list_convs(user=Depends(get_current_user)):
 
 
 @router.get("/conversation/{cid}")
-async def get_conv(cid:str, user=Depends(get_current_user)):
-    doc = await chat_col.find_one({"_id":cid,"user_id":user["_id"]})
+async def get_conv(
+    cid:str, user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
+    doc = await ChatsRepository(db, org_id).find_one({"_id":cid,"user_id":user["_id"]})
     if not doc: raise HTTPException(404,"Not found")
     doc["_id"] = str(doc["_id"])
     for k in ("created_at","updated_at"):
@@ -110,8 +122,12 @@ async def get_conv(cid:str, user=Depends(get_current_user)):
 
 
 @router.post("/conversation/{cid}/message")
-async def send_msg(cid:str, body:MsgIn, user=Depends(get_current_user)):
-    doc = await chat_col.find_one({"_id":cid,"user_id":user["_id"]})
+async def send_msg(
+    cid:str, body:MsgIn, user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
+    repo = ChatsRepository(db, org_id)
+    doc = await repo.find_one({"_id":cid,"user_id":user["_id"]})
     if not doc: raise HTTPException(404,"Conversation not found")
 
     messages = doc.get("messages",[])
@@ -134,12 +150,15 @@ async def send_msg(cid:str, body:MsgIn, user=Depends(get_current_user)):
     if title == "New Conversation" and len(messages) == 2:
         title = body.message[:50] + ("..." if len(body.message)>50 else "")
 
-    await chat_col.update_one({"_id":cid},
+    await repo.update_one({"_id":cid},
         {"$set":{"messages":messages,"title":title,"updated_at":datetime.now(timezone.utc)}})
     return {"user_message":user_msg,"assistant_message":ai_msg,"conversation_id":cid}
 
 
 @router.delete("/conversation/{cid}")
-async def del_conv(cid:str, user=Depends(get_current_user)):
-    await chat_col.delete_one({"_id":cid,"user_id":user["_id"]})
+async def del_conv(
+    cid:str, user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
+    await ChatsRepository(db, org_id).delete_one({"_id":cid,"user_id":user["_id"]})
     return {"deleted":True}

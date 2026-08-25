@@ -4,7 +4,9 @@ from datetime import datetime, timezone
 import uuid
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from database import transactions_collection
+from core.database import get_db
+from core.dependencies import get_tenant_id
+from repositories.transactions import TransactionsRepository
 from routes.auth import get_current_user
 from ml.classifier import classify_transaction, SUSPICIOUS_KEYWORDS
 
@@ -101,7 +103,10 @@ def analyze_phishing(content: str, sender: str, subject: str) -> dict:
 
 
 @router.post("/check")
-async def check_phishing(body: PhishingCheck, current_user=Depends(get_current_user)):
+async def check_phishing(
+    body: PhishingCheck, current_user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
     result = analyze_phishing(body.content, body.sender, body.subject)
 
     # Log to database
@@ -120,14 +125,17 @@ async def check_phishing(body: PhishingCheck, current_user=Depends(get_current_u
         "type": "phishing_check",
         "timestamp": datetime.now(timezone.utc),
     }
-    await transactions_collection.insert_one(log)
+    await TransactionsRepository(db, org_id).insert_one(log)
 
     return {**result, "check_id": log["_id"]}
 
 
 @router.get("/history")
-async def phishing_history(current_user=Depends(get_current_user)):
-    cursor = transactions_collection.find(
+async def phishing_history(
+    current_user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
+    cursor = TransactionsRepository(db, org_id).find_many(
         {"user_id": current_user["_id"], "type": "phishing_check"},
         sort=[("timestamp", -1)]
     ).limit(30)

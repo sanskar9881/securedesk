@@ -47,3 +47,18 @@ class OrganizationsRepository:
 
     async def count(self) -> int:
         return await self.collection.count_documents({})
+
+    async def domain_taken_by_another(self, domain: str, org_id: str) -> bool:
+        """True if some *other* organisation already owns this domain."""
+        return await self.collection.count_documents(
+            {"domain": domain, "_id": {"$ne": org_id}}, limit=1
+        ) > 0
+
+    async def update_profile(self, org_id: str, **fields: Any) -> None:
+        """Update an organisation's own descriptive fields (name, domain,
+        industry, size, ...). Callers pass only the fields they own the
+        right to change — this does not accept org_id or _id."""
+        fields.pop("org_id", None)
+        fields.pop("_id", None)
+        if fields:
+            await self.collection.update_one({"_id": org_id}, {"$set": fields})

@@ -4,12 +4,12 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from core.config import get_settings
-from database import db
+from core.database import get_db
+from core.dependencies import get_tenant_id
+from repositories.billing import PaymentsRepository, SubscriptionsRepository
 from routes.auth import get_current_user
 
 router  = APIRouter()
-sub_col = db["subscriptions"]
-pay_col = db["payments"]
 
 PLANS = {
     "starter": {
@@ -61,8 +61,11 @@ async def list_plans():
 
 
 @router.get("/subscription")
-async def get_subscription(user=Depends(get_current_user)):
-    sub = await sub_col.find_one({"user_id": user["_id"]}, sort=[("created_at",-1)])
+async def get_subscription(
+    user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
+    sub = await SubscriptionsRepository(db, org_id).find_one({"user_id": user["_id"]}, sort=[("created_at",-1)])
     if not sub:
         return {
             "plan":    "trial",
@@ -127,7 +130,10 @@ async def create_order(body: CreateOrder, user=Depends(get_current_user)):
 
 
 @router.post("/verify")
-async def verify_payment(body: VerifyPayment, user=Depends(get_current_user)):
+async def verify_payment(
+    body: VerifyPayment, user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
     """
     Record a subscription against a gateway-confirmed payment.
 
@@ -151,6 +157,7 @@ async def verify_payment(body: VerifyPayment, user=Depends(get_current_user)):
     what has to hold before it is ever mounted again.
     """
     settings = get_settings()
+    sub_repo = SubscriptionsRepository(db, org_id)
     razorpay_key    = os.getenv("RAZORPAY_KEY_ID", "")
     razorpay_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
 
@@ -159,7 +166,7 @@ async def verify_payment(body: VerifyPayment, user=Depends(get_current_user)):
 
     if demo_mode:
         plan_info = PLANS.get(body.plan_id, {})
-        await sub_col.insert_one({
+        await sub_repo.insert_one({
             "_id":        str(uuid.uuid4()),
             "user_id":    user["_id"],
             "user_name":  user["name"],
@@ -189,7 +196,7 @@ async def verify_payment(body: VerifyPayment, user=Depends(get_current_user)):
         raise HTTPException(400, "Payment verification failed - invalid signature")
 
     plan_info = PLANS.get(body.plan_id, {})
-    await sub_col.insert_one({
+    await sub_repo.insert_one({
         "_id":        str(uuid.uuid4()),
         "user_id":    user["_id"],
         "user_name":  user["name"],
@@ -200,7 +207,7 @@ async def verify_payment(body: VerifyPayment, user=Depends(get_current_user)):
         "created_at": datetime.now(timezone.utc),
         "expires_at": datetime.now(timezone.utc) + timedelta(days=30),
     })
-    await pay_col.insert_one({
+    await PaymentsRepository(db, org_id).insert_one({
         "_id":        str(uuid.uuid4()),
         "user_id":    user["_id"],
         "payment_id": body.razorpay_payment_id,

@@ -5,7 +5,9 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, UploadFile, File, Form
-from database import transactions_collection
+from core.database import get_db
+from core.dependencies import get_tenant_id
+from repositories.transactions import TransactionsRepository
 from routes.auth import get_current_user
 from ml.classifier import classify_transaction
 from core.uploads import read_validated_upload
@@ -186,6 +188,8 @@ async def send_file(
     body: str = Form(...),
     file: Optional[UploadFile] = File(None),
     current_user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id),
+    db=Depends(get_db),
 ):
     filename = ""
     file_size = 0
@@ -243,7 +247,7 @@ async def send_file(
         "type": "file_transaction",
     }
 
-    await transactions_collection.insert_one(transaction)
+    await TransactionsRepository(db, org_id).insert_one(transaction)
 
     return {
         "success": True,
@@ -258,8 +262,12 @@ async def send_file(
 
 
 @router.get("/my-history")
-async def my_history(current_user=Depends(get_current_user)):
-    cursor = transactions_collection.find(
+async def my_history(
+    current_user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id),
+    db=Depends(get_db),
+):
+    cursor = TransactionsRepository(db, org_id).find_many(
         {"sender_id": current_user["_id"], "type": "file_transaction"},
         sort=[("timestamp", -1)],
     ).limit(50)

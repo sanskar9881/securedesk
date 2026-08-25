@@ -6,10 +6,12 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from pydantic import BaseModel, ConfigDict
-from database import db, users_collection, reset_tokens_collection
 from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 from core.config import get_settings
+from core.database import get_database
 from repositories.organizations import OrganizationsRepository
+from repositories.reset_tokens import ResetTokensRepository
+from repositories.users import PreTenantAccounts
 from services.email_alert_service import send_password_reset_email
 
 log = logging.getLogger("securedesk.auth")
@@ -41,15 +43,14 @@ async def ensure_personal_org(user: dict) -> dict:
     if user.get("org_id"):
         return user
 
-    from core.database import get_database
-    org_repo = OrganizationsRepository(get_database())
+    db = get_database()
     org_id = str(uuid.uuid4())
-    await org_repo.create(
+    await OrganizationsRepository(db).create(
         org_id=org_id,
         name=f"{user.get('name') or user['_id']}'s organisation",
         owner_id=user["_id"],
     )
-    await users_collection.update_one({"_id": user["_id"]}, {"$set": {"org_id": org_id}})
+    await PreTenantAccounts(db).set_org_id(user["_id"], org_id)
     user["org_id"] = org_id
     return user
 
@@ -82,7 +83,7 @@ async def get_current_user(
     except JWTError:
         raise HTTPException(401, "Token expired — please login again")
 
-    user = await users_collection.find_one({"_id": uid})
+    user = await PreTenantAccounts(get_database()).find_by_id(uid)
     if not user:
         raise HTTPException(401, "User not found")
     # Self-heals any account from before org_id was mandatory (see
@@ -184,14 +185,10 @@ async def register(body: RegisterBody):
     role = USER_ROLE
 
     cid = clean_identifier(ident)
+    accounts = PreTenantAccounts(get_database())
 
     # ── Duplicate check ──────────────────────────────────────────
-    existing = await users_collection.find_one({
-        "$or": [
-            {"email": cid}, {"phone": cid},
-            {"email": ident.lower()}, {"phone": ident},
-        ]
-    })
+    existing = await accounts.find_by_identifier(cid, ident)
     if existing:
         raise HTTPException(
             400,
@@ -214,7 +211,7 @@ async def register(body: RegisterBody):
         "email":        cid if has_at    else "",
         "phone":        cid if is_digits else "",
     }
-    await users_collection.insert_one(doc)
+    await accounts.insert(doc)
     token = make_token(uid, role)
 
     return {
@@ -233,15 +230,7 @@ async def login(body: LoginBody):
         raise HTTPException(400, "Enter your email or phone")
 
     cid = clean_identifier(ident)
-
-    user = await users_collection.find_one({
-        "$or": [
-            {"email": cid},
-            {"phone": cid},
-            {"email": ident.lower()},
-            {"phone": ident},
-        ]
-    })
+    user = await PreTenantAccounts(get_database()).find_by_identifier(cid, ident)
 
     if not user:
         raise HTTPException(
@@ -317,15 +306,14 @@ async def forgot_password(body: dict):
         log.warning("password reset requested but SMTP is not configured; flow is disabled")
         return {"message": _RESET_ACK}
 
+    db = get_database()
     ident = (body.get("identifier") or "").strip()
     cid   = clean_identifier(ident)
-    user  = await users_collection.find_one(
-        {"$or": [{"email": cid}, {"phone": cid}]}
-    )
+    user  = await PreTenantAccounts(db).find_by_identifier(cid, cid)
 
     if user and user.get("email"):
         tok = str(uuid.uuid4())
-        await reset_tokens_collection.insert_one({
+        await ResetTokensRepository(db).create({
             "_id":        tok,
             "user_id":    user["_id"],
             "created_at": datetime.now(timezone.utc),
@@ -351,14 +339,14 @@ async def reset_password(body: dict):
     pw  = (body.get("new_password") or "").strip()
     if not tok or len(pw) < 6:
         raise HTTPException(400, "Token and password (min 6 chars) required")
-    doc = await reset_tokens_collection.find_one({"_id": tok, "used": False})
+
+    db = get_database()
+    tokens_repo = ResetTokensRepository(db)
+    doc = await tokens_repo.find_unused(tok)
     if not doc or doc["expires_at"] < datetime.now(timezone.utc):
         raise HTTPException(400, "Invalid or expired token")
+
     ph = bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
-    await users_collection.update_one(
-        {"_id": doc["user_id"]}, {"$set": {"password": ph}}
-    )
-    await reset_tokens_collection.update_one(
-        {"_id": tok}, {"$set": {"used": True}}
-    )
+    await PreTenantAccounts(db).set_password_hash(doc["user_id"], ph)
+    await tokens_repo.mark_used(tok)
     return {"message": "Password changed successfully"}

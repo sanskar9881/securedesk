@@ -2,30 +2,31 @@ import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from database import db
+
+from core.database import get_db
+from core.dependencies import get_tenant_id
+from repositories.nda import NdaAgreementsRepository, OnboardingRecordsRepository
 from routes.auth import get_current_user
 
 router  = APIRouter()
-nda_col = db["nda_agreements"]
-onb_col = db["onboarding_records"]
 
 NDA_TEXT = """
 EMPLOYEE DATA CONFIDENTIALITY AGREEMENT
 
 This agreement is between the Employee and the Company.
 
-1. CONFIDENTIAL DATA: Employee agrees not to share, copy, transmit, 
-   or disclose any confidential company data including but not limited to: 
-   customer records, financial data, source code, trade secrets, PAN/Aadhaar 
+1. CONFIDENTIAL DATA: Employee agrees not to share, copy, transmit,
+   or disclose any confidential company data including but not limited to:
+   customer records, financial data, source code, trade secrets, PAN/Aadhaar
    data, or any personally identifiable information.
 
-2. MONITORING: Employee acknowledges that SecureDesk monitors file sharing 
+2. MONITORING: Employee acknowledges that SecureDesk monitors file sharing
    activity to protect company data and comply with DPDP Act 2023.
 
 3. CONSEQUENCES: Unauthorized data sharing may result in immediate termination
    and legal action under IT Act 2000 and DPDP Act 2023.
 
-4. DURATION: This agreement remains in effect during employment and 
+4. DURATION: This agreement remains in effect during employment and
    for 2 years after termination.
 
 By signing digitally, Employee confirms they have read and agreed to these terms.
@@ -52,12 +53,16 @@ async def get_nda_text():
 
 
 @router.post("/nda/sign")
-async def sign_nda(body: NDASigning, user=Depends(get_current_user)):
+async def sign_nda(
+    body: NDASigning, user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
     """Employee digitally signs the NDA."""
     if not body.agreed:
         raise HTTPException(400, "You must agree to the NDA to proceed")
 
-    existing = await nda_col.find_one({"user_id": user["_id"]})
+    repo = NdaAgreementsRepository(db, org_id)
+    existing = await repo.find_one({"user_id": user["_id"]})
     if existing:
         return {
             "signed":      True,
@@ -69,7 +74,7 @@ async def sign_nda(body: NDASigning, user=Depends(get_current_user)):
     agreement_id = str(uuid.uuid4())
     signed_at    = datetime.now(timezone.utc)
 
-    await nda_col.insert_one({
+    await repo.insert_one({
         "_id":         agreement_id,
         "user_id":     user["_id"],
         "user_name":   user["name"],
@@ -79,7 +84,6 @@ async def sign_nda(body: NDASigning, user=Depends(get_current_user)):
         "nda_version": "1.0",
         "ip_address":  body.ip_address,
         "signed_at":   signed_at,
-        "org_id":      user.get("org_id",""),
         "org_name":    user.get("org_name",""),
     })
 
@@ -93,8 +97,11 @@ async def sign_nda(body: NDASigning, user=Depends(get_current_user)):
 
 
 @router.get("/nda/status")
-async def nda_status(user=Depends(get_current_user)):
-    doc = await nda_col.find_one({"user_id": user["_id"]})
+async def nda_status(
+    user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
+    doc = await NdaAgreementsRepository(db, org_id).find_one({"user_id": user["_id"]})
     if not doc:
         return {"signed": False, "message": "NDA not yet signed"}
     return {
@@ -106,10 +113,13 @@ async def nda_status(user=Depends(get_current_user)):
 
 
 @router.get("/nda/list")
-async def list_ndas(user=Depends(get_current_user)):
+async def list_ndas(
+    user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
     if user.get("role") not in ("admin","manager"):
         raise HTTPException(403, "Admin access required")
-    cur = nda_col.find({}, sort=[("signed_at",-1)])
+    cur = NdaAgreementsRepository(db, org_id).find_many({}, sort=[("signed_at",-1)])
     out = []
     async for d in cur:
         if hasattr(d.get("signed_at"),"isoformat"): d["signed_at"] = d["signed_at"].isoformat()
@@ -118,12 +128,15 @@ async def list_ndas(user=Depends(get_current_user)):
 
 
 @router.post("/complete")
-async def complete_onboarding(body: OnboardingComplete, user=Depends(get_current_user)):
-    nda = await nda_col.find_one({"user_id": user["_id"]})
+async def complete_onboarding(
+    body: OnboardingComplete, user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
+    nda = await NdaAgreementsRepository(db, org_id).find_one({"user_id": user["_id"]})
     if not nda:
         raise HTTPException(400, "Must sign NDA before completing onboarding")
 
-    await onb_col.insert_one({
+    await OnboardingRecordsRepository(db, org_id).insert_one({
         "_id":          str(uuid.uuid4()),
         "user_id":      user["_id"],
         "user_name":    user["name"],
@@ -132,15 +145,17 @@ async def complete_onboarding(body: OnboardingComplete, user=Depends(get_current
         "start_date":   body.start_date,
         "nda_signed":   True,
         "completed_at": datetime.now(timezone.utc),
-        "org_id":       user.get("org_id",""),
     })
     return {"onboarding_complete": True, "message": "Welcome! Your account is fully set up."}
 
 
 @router.get("/status")
-async def onboarding_status(user=Depends(get_current_user)):
-    nda    = await nda_col.find_one({"user_id": user["_id"]})
-    onb    = await onb_col.find_one({"user_id": user["_id"]})
+async def onboarding_status(
+    user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
+    nda = await NdaAgreementsRepository(db, org_id).find_one({"user_id": user["_id"]})
+    onb = await OnboardingRecordsRepository(db, org_id).find_one({"user_id": user["_id"]})
     return {
         "nda_signed":           bool(nda),
         "onboarding_complete":  bool(onb),
