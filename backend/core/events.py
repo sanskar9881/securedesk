@@ -57,25 +57,37 @@ class EventBus:
     def subscribe(self, event_type: str, handler: Handler, *, blocking: bool = True) -> None:
         self._subs[event_type].append(_Subscription(handler=handler, blocking=blocking))
 
-    async def publish(self, event_type: str, /, *args, **kwargs) -> None:
+    async def publish(self, event_type: str, /, *args, **kwargs) -> list:
         """
         Run every blocking handler for `event_type`, in registration
         order, awaited in turn — the first one to raise stops the rest and
         propagates to the caller. Then fire every background handler
         without waiting for them.
 
+        Returns the blocking handlers' return values, in registration
+        order (background handlers' results are fire-and-forget and never
+        included — publish() has already returned by the time they finish).
+        Callers that don't need it just discard it, as every caller did
+        before this returned anything; a publisher that wants a value back
+        — e.g. routes/analyze.py reading the evidence entry's _id out of
+        services/event_handlers.py's write, to hand back as evidence_id in
+        its HTTP response — reads results[0].
+
         Publishing an event_type with zero subscribers is not an error —
         that's the normal case for most event types most of the time, not
         a misconfiguration.
         """
         subs = self._subs.get(event_type, ())
+        results = []
         for sub in subs:
             if sub.blocking:
-                await sub.handler(*args, **kwargs)
+                results.append(await sub.handler(*args, **kwargs))
 
         for sub in subs:
             if not sub.blocking:
                 asyncio.create_task(self._run_background(event_type, sub.handler, args, kwargs))
+
+        return results
 
     @staticmethod
     async def _run_background(event_type: str, handler: Handler, args: tuple, kwargs: dict) -> None:

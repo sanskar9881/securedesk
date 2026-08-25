@@ -1,13 +1,15 @@
 """
 Wires evidence_service.append_entry onto the event bus (core/events.py) as
-the blocking handler for every scan-decision event, protected by a Phase 6
-circuit breaker + bounded retry (core/circuit_breaker.py).
+the blocking handler for every event that must land in the evidence chain
+before its request can succeed, protected by a Phase 6 circuit breaker +
+bounded retry (core/circuit_breaker.py).
 
 register_handlers() is called once from main.py's lifespan, so subscription
 happens exactly once per process regardless of how many times routes
 modules get imported. Routes never call evidence_service or the breaker
-directly for a scan decision any more — they publish("scan_blocked", ...)
-etc. and this module owns what happens next (see routes/analyze.py).
+directly — they publish(event_type, ...) and this module owns what happens
+next (see routes/analyze.py for scan decisions, routes/evidence.py for
+override requests).
 """
 from __future__ import annotations
 
@@ -33,7 +35,18 @@ evidence_write_breaker = CircuitBreaker(
 )
 
 
-async def _write_scan_evidence(db, org_id: str, *, user_id: str, event_type: str, payload: dict) -> None:
+async def _write_evidence_entry(db, org_id: str, *, user_id: str, event_type: str, payload: dict) -> dict:
+    """
+    Generic evidence-chain write, subscribed under several event types
+    (see register_handlers below) — nothing here is scan-specific despite
+    the module's original scan-only scope; append_entry() itself is what
+    validates event_type against EVENT_TYPES.
+
+    Returns the stored entry (see evidence_service.append_entry) —
+    core.events.EventBus.publish() collects blocking handlers' return
+    values, so the publisher can read entry["_id"] back as evidence_id in
+    its HTTP response without importing evidence_service or the breaker.
+    """
     async def _write():
         return await evidence_service.append_entry(
             db, org_id, user_id=user_id, event_type=event_type, payload=payload,
@@ -45,7 +58,7 @@ async def _write_scan_evidence(db, org_id: str, *, user_id: str, event_type: str
     # config error, not a transient condition, and retrying either just
     # delays the same guaranteed failure. Only a driver-level error
     # (dropped connection, primary election, timeout) is worth retrying.
-    await evidence_write_breaker.call(_write, retries=2, retry_on=(PyMongoError,))
+    return await evidence_write_breaker.call(_write, retries=2, retry_on=(PyMongoError,))
 
 
 _REGISTERED = False
@@ -56,6 +69,6 @@ def register_handlers() -> None:
     global _REGISTERED
     if _REGISTERED:
         return
-    for event_type in ("scan_allowed", "scan_warned", "scan_blocked"):
-        bus.subscribe(event_type, _write_scan_evidence, blocking=True)
+    for event_type in ("scan_allowed", "scan_warned", "scan_blocked", "override_requested"):
+        bus.subscribe(event_type, _write_evidence_entry, blocking=True)
     _REGISTERED = True

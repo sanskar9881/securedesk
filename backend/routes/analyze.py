@@ -7,14 +7,14 @@ from pydantic import BaseModel
 from core.config import get_settings
 from core.database import get_db
 from core.dependencies import get_tenant_id
-from core.device_auth import make_actor_dependency
+from core.device_auth import dlp_scan_actor
 from core.events import bus
 from repositories.activity import ActivityRepository
 from repositories.alerts import AlertsRepository
 from repositories.fingerprinted_files import FingerprintedFilesRepository
 from routes.auth import get_current_user
 from services.vision_service import analyze_image
-from services.regex_engine import classify_score, scan, score, score_detailed
+from services.regex_engine import HIGH_THRESHOLD, classify_score, scan, score_detailed
 from services.ai_service import classify_file
 from services.file_service import extract_text, sha256, save_fingerprint
 from services.logger_service import log_event
@@ -31,11 +31,12 @@ _EVENT_TYPE_BY_ACTION = {"ALLOW": "scan_allowed", "WARN": "scan_warned", "BLOCK"
 # Phase 4: the only two routes a device token (Chrome extension) can call.
 # Accepts a normal JWT session too, unchanged — see core/device_auth.py.
 # The web app keeps working exactly as before; a device token additionally
-# unlocks these two, and nothing else.
-scan_actor = make_actor_dependency("dlp:scan")
+# unlocks these two, and nothing else. Shared with routes/evidence.py's
+# override-request endpoint — see core/device_auth.py.
+scan_actor = dlp_scan_actor
 
 
-async def _record_scan_evidence(db, org_id: str, user: dict, action: str, payload: dict) -> None:
+async def _record_scan_evidence(db, org_id: str, user: dict, action: str, payload: dict) -> str | None:
     """
     Publish a scan decision onto the event bus (core/events.py). Called
     synchronously in the request path, after the decision is made and
@@ -44,6 +45,10 @@ async def _record_scan_evidence(db, org_id: str, user: dict, action: str, payloa
     which is what makes the ordering matter regardless of the bus's
     existence: a scan decision that was never durably logged is not the
     product SecureDesk sells (see services/evidence_service.py).
+
+    Returns the written entry's id (evidence_id in the HTTP response) or
+    None when EVIDENCE_ENABLED is false — the extension's block/override UI
+    references this id, so callers need it back, not just the side effect.
 
     payload must already be PII-safe by the time it reaches here — no raw
     file text, no matched PII substrings, only categories/counts/summaries.
@@ -64,9 +69,10 @@ async def _record_scan_evidence(db, org_id: str, user: dict, action: str, payloa
     settings = get_settings()
     if not settings.EVIDENCE_ENABLED:
         log.warning("evidence chain disabled (EVIDENCE_ENABLED=false) — scan not recorded")
-        return
+        return None
     event_type = _EVENT_TYPE_BY_ACTION.get(action, "scan_warned")
-    await bus.publish(event_type, db, org_id, user_id=user["_id"], event_type=event_type, payload=payload)
+    results = await bus.publish(event_type, db, org_id, user_id=user["_id"], event_type=event_type, payload=payload)
+    return results[0]["_id"] if results else None
 
 
 class TextScanRequest(BaseModel):
@@ -106,12 +112,17 @@ async def analyze_text(
     # core/device_auth.py.
     org_id = user["org_id"]
     findings                 = scan(body.text, body.filename)
-    risk_level, action, reasons = score(findings)
+    total_score, risk_level, action, reasons = score_detailed(findings)
     llm = {}
     if body.use_llm:
         llm = await classify_file(body.text, body.filename, findings)
         if llm.get("recommended_action") == "BLOCK" and action != "BLOCK":
             action, risk_level = "BLOCK", "HIGH"
+            # Escalation-only (see module-level invariant): total_score
+            # only ever moves up to match a BLOCK the LLM forced, never
+            # down — same floor regex_engine.classify_score() itself uses
+            # for HIGH.
+            total_score = min(100, max(total_score, HIGH_THRESHOLD))
             reasons.append(f"AI: {llm.get('sensitivity_reason','')}")
     anomalies = await check_anomalies(db, org_id, user["_id"], user["name"], "analyze",
                                        body.filename, risk_level)
@@ -122,7 +133,7 @@ async def analyze_text(
 
     # Blocking: lands before the response returns. No raw text — findings
     # already carry counts rather than matched values (see regex_engine.py).
-    await _record_scan_evidence(db, org_id, user, action, payload={
+    evidence_id = await _record_scan_evidence(db, org_id, user, action, payload={
         "filename": body.filename, "source": "text_scan",
         "risk_level": risk_level, "action": action, "reasons": reasons,
         "regex_findings": findings,
@@ -132,6 +143,7 @@ async def analyze_text(
 
     return {
         "risk_level": risk_level, "recommended_action": action,
+        "risk_score": total_score, "evidence_id": evidence_id,
         "reasons": reasons or ["No sensitive data detected"],
         "regex_findings": findings, "llm_analysis": llm,
         "filename": body.filename, "anomalies": anomalies,
@@ -212,7 +224,7 @@ async def analyze_upload(
     # Blocking: lands before the response returns. file_hash identifies the
     # content without storing it; regex_findings carry counts, never the
     # matched PII values themselves.
-    await _record_scan_evidence(db, org_id, user, action, payload={
+    evidence_id = await _record_scan_evidence(db, org_id, user, action, payload={
         "filename": filename, "source": "file_upload",
         "file_hash": h, "file_size": len(content),
         "risk_level": risk_level, "action": action, "reasons": reasons,
@@ -231,6 +243,7 @@ async def analyze_upload(
 
     return {
         "risk_level": risk_level, "recommended_action": action,
+        "risk_score": total_score, "evidence_id": evidence_id,
         "reasons": reasons or ["No sensitive data detected"],
         "regex_findings": findings, "llm_analysis": llm,
         "vision_analysis": vision,

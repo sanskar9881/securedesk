@@ -82,3 +82,13 @@ def make_actor_dependency(required_scope: str):
         return user
 
     return _actor
+
+
+# Shared singleton for the one real scope in use (see
+# services/token_service.py's DEVICE_TOKEN_SCOPES). Built once here rather
+# than separately in every route module that needs it — routes/analyze.py's
+# scan endpoints and routes/evidence.py's override-request endpoint both
+# import this rather than each calling make_actor_dependency("dlp:scan")
+# themselves, so there is exactly one HTTPBearer() instance and one place
+# that says what "dlp:scan" routes exist.
+dlp_scan_actor = make_actor_dependency("dlp:scan")
