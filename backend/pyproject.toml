@@ -25,3 +25,8 @@ select = ["DTZ"]
 # genuinely date-only and never hashed into evidence; exempt rather than
 # force a fake tzinfo onto training data.
 "ml/*" = ["DTZ"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]

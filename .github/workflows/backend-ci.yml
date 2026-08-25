@@ -1,0 +1,64 @@
+name: backend ci
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**"]
+  pull_request:
+    paths: ["backend/**"]
+
+jobs:
+  datetime-safety:
+    name: naive datetime check (ruff DTZ)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install "ruff==0.8.4"
+
+      # Blocking, not advisory: evidence entries hash their timestamps
+      # (Phase 3), so a naive datetime that regresses in silently would
+      # corrupt every hash computed downstream of it. Config lives in
+      # backend/pyproject.toml — see the comment there for what each DTZ
+      # code catches and why ml/ is exempted.
+      - name: ruff check --select DTZ
+        working-directory: backend
+        run: ruff check --select DTZ .
+
+  tenant-isolation:
+    name: tenant isolation regression tests
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:7
+        ports: ["27017:27017"]
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ping:1})'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      # Blocking: this is the regression test the tenant-isolation phase
+      # requires to exist. It asserts, against a real MongoDB instance, that
+      # a TenantScopedRepository bound to one org cannot read, update,
+      # delete, count, or aggregate another org's data through any method
+      # the base class exposes. See backend/tests/test_tenant_isolation.py.
+      - name: pytest
+        working-directory: backend
+        env:
+          TEST_MONGODB_URL: mongodb://localhost:27017
+        run: pytest tests/ -v
