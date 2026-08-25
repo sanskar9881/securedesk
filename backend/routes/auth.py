@@ -9,12 +9,49 @@ from pydantic import BaseModel, ConfigDict
 from database import db, users_collection, reset_tokens_collection
 from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 from core.config import get_settings
+from repositories.organizations import OrganizationsRepository
 from services.email_alert_service import send_password_reset_email
 
 log = logging.getLogger("securedesk.auth")
 
 router = APIRouter()
 bearer = HTTPBearer()
+
+
+async def ensure_personal_org(user: dict) -> dict:
+    """
+    Guarantee `user` has an org_id, creating a personal organisation if not.
+
+    This is what makes org_id mandatory rather than optional: every account
+    that authenticates — freshly registered, or an older account from before
+    this existed — leaves this function with one. TenantScopedRepository
+    raises on a falsy org_id by design (see repositories/base.py); this is
+    the one place that guarantee gets made true, so nothing downstream needs
+    a "what if there's no org" branch.
+
+    One organisation per user, never grouped by email domain — same rule the
+    Phase 2 migration script uses for existing data, applied here going
+    forward for new and self-healing accounts instead. A user who wants to
+    share an organisation with colleagues does so explicitly afterward
+    (POST /api/org/create, invite flow), not by an inferred match.
+
+    Idempotent: a user who already has org_id is returned unchanged, so this
+    is safe to call on every register() and every login().
+    """
+    if user.get("org_id"):
+        return user
+
+    from core.database import get_database
+    org_repo = OrganizationsRepository(get_database())
+    org_id = str(uuid.uuid4())
+    await org_repo.create(
+        org_id=org_id,
+        name=f"{user.get('name') or user['_id']}'s organisation",
+        owner_id=user["_id"],
+    )
+    await users_collection.update_one({"_id": user["_id"]}, {"$set": {"org_id": org_id}})
+    user["org_id"] = org_id
+    return user
 
 
 def clean_identifier(s: str) -> str:
@@ -48,7 +85,11 @@ async def get_current_user(
     user = await users_collection.find_one({"_id": uid})
     if not user:
         raise HTTPException(401, "User not found")
-    return user
+    # Self-heals any account from before org_id was mandatory (see
+    # ensure_personal_org). Idempotent and near-free once the field is set —
+    # this is what lets every route depend on org_id always being present
+    # without a migration having to run first.
+    return await ensure_personal_org(user)
 
 
 async def admin_only(user=Depends(get_current_user)):
