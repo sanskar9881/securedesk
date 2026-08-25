@@ -17,23 +17,7 @@ from __future__ import annotations
 import asyncio
 
 from core.config import get_settings
-
-# The key holding the owning account id. The collections disagree, so each
-# one is named explicitly; anything not listed is probed against all three.
-OWNER_FIELDS = {
-    "activity_logs":      "user_id",
-    "alerts":             "user_id",
-    "transactions":       "sender_id",
-    "fingerprinted_files": "owner_id",
-    "copilot_queries":    "user_id",
-    "whatsapp_logs":      "user_id",
-    "subscriptions":      "user_id",
-    "ip_logs":            "user_id",
-    "reset_tokens":       "user_id",
-}
-CANDIDATE_FIELDS = ("user_id", "sender_id", "owner_id")
-
-SET = {"$nin": [None, ""]}
+from scripts.tenancy_common import CANDIDATE_FIELDS, NON_EMPTY as SET, OWNER_FIELDS
 
 
 async def audit() -> None:

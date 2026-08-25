@@ -11,6 +11,13 @@ backend/ml/model.pkl
 backend/.env
 frontend/.env
 
+# Migration reports can embed real document content (quarantined records
+# are written verbatim so they can be reviewed) — never commit these.
+backend/scripts/migration_reports/
+
+# Test artifacts
+backend/.pytest_cache/
+
 # Node
 frontend/node_modules/
 frontend/dist/
