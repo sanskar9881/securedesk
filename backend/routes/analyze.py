@@ -1,15 +1,21 @@
 import uuid
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, UploadFile, File, Form, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
 from pydantic import BaseModel
-from database import db, fingerprints_collection, activity_collection, alerts_collection
+
+from core.config import get_settings
+from core.database import get_db
+from core.dependencies import get_tenant_id
+from repositories.activity import ActivityRepository
+from repositories.alerts import AlertsRepository
+from repositories.fingerprinted_files import FingerprintedFilesRepository
 from routes.auth import get_current_user
 from services.regex_engine import scan, score
 from services.ai_service import classify_file
 from services.file_service import extract_text, sha256, save_fingerprint
 from services.logger_service import log_event
 from services.watermark_service import apply_watermark
-from services.ueba_service import check_anomalies
+from services.ueba_service import check_anomalies, get_ueba_dashboard
 from services.email_alert_service import send_alert_email
 from core.uploads import read_validated_upload
 
@@ -25,9 +31,7 @@ class TextScanRequest(BaseModel):
 async def _send_manager_alert(user: dict, filename: str, risk_level: str,
                                reasons: list, action: str):
     """Background task — alert manager via email for HIGH risk events."""
-    import os
-    from database import db as _db
-    manager_email = os.getenv("MANAGER_ALERT_EMAIL", "")
+    manager_email = get_settings().MANAGER_ALERT_EMAIL
     if not manager_email or risk_level != "HIGH":
         return
     await send_alert_email(
@@ -43,7 +47,10 @@ async def _send_manager_alert(user: dict, filename: str, risk_level: str,
 
 
 @router.post("/analyze-file")
-async def analyze_text(body: TextScanRequest, user=Depends(get_current_user)):
+async def analyze_text(
+    body: TextScanRequest, user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
     findings                 = scan(body.text, body.filename)
     risk_level, action, reasons = score(findings)
     llm = {}
@@ -52,9 +59,9 @@ async def analyze_text(body: TextScanRequest, user=Depends(get_current_user)):
         if llm.get("recommended_action") == "BLOCK" and action != "BLOCK":
             action, risk_level = "BLOCK", "HIGH"
             reasons.append(f"AI: {llm.get('sensitivity_reason','')}")
-    anomalies = await check_anomalies(user["_id"], user["name"], "analyze",
+    anomalies = await check_anomalies(db, org_id, user["_id"], user["name"], "analyze",
                                        body.filename, risk_level)
-    await log_event(user["_id"], user["name"], "analyze",
+    await log_event(db, org_id, user["_id"], user["name"], "analyze",
                     filename=body.filename, risk_level=risk_level,
                     action_taken=action, reasons=reasons,
                     extra={"anomalies": anomalies})
@@ -74,6 +81,8 @@ async def analyze_upload(
     use_llm: bool    = Form(True),
     watermark: bool  = Form(True),
     user             = Depends(get_current_user),
+    org_id: str      = Depends(get_tenant_id),
+    db               = Depends(get_db),
 ):
     # Streams with a hard size ceiling, rejects executables, and requires the
     # sniffed magic bytes to agree with the declared extension.
@@ -102,10 +111,10 @@ async def analyze_upload(
             visible=(risk_level in ("HIGH", "MEDIUM"))
         )
 
-    is_dup = await save_fingerprint(h, filename, user["_id"], user["name"],
+    is_dup = await save_fingerprint(db, org_id, h, filename, user["_id"], user["name"],
                                     len(content), risk_level, action, reasons, findings)
-    anomalies = await check_anomalies(user["_id"], user["name"], "upload", filename, risk_level)
-    await log_event(user["_id"], user["name"], "upload",
+    anomalies = await check_anomalies(db, org_id, user["_id"], user["name"], "upload", filename, risk_level)
+    await log_event(db, org_id, user["_id"], user["name"], "upload",
                     filename=filename, file_hash=h,
                     risk_level=risk_level, action_taken=action, reasons=reasons,
                     extra={"anomalies": anomalies, "watermarked": watermark})
@@ -126,9 +135,13 @@ async def analyze_upload(
 
 
 @router.get("/files/logs")
-async def file_logs(limit: int = 50, user=Depends(get_current_user)):
+async def file_logs(
+    limit: int = 50, user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
+    repo = FingerprintedFilesRepository(db, org_id)
     q = {} if user.get("role") in ("admin","manager") else {"owner_id": user["_id"]}
-    cur = fingerprints_collection.find(q, sort=[("created_at",-1)]).limit(limit)
+    cur = repo.find_many(q, sort=[("created_at",-1)]).limit(limit)
     out = []
     async for d in cur:
         for k in ("created_at","last_accessed"):
@@ -138,9 +151,13 @@ async def file_logs(limit: int = 50, user=Depends(get_current_user)):
 
 
 @router.get("/activity")
-async def get_activity(limit: int = 100, user=Depends(get_current_user)):
+async def get_activity(
+    limit: int = 100, user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
+    repo = ActivityRepository(db, org_id)
     q = {} if user.get("role") in ("admin","manager") else {"user_id": user["_id"]}
-    cur = activity_collection.find(q, sort=[("timestamp",-1)]).limit(limit)
+    cur = repo.find_many(q, sort=[("timestamp",-1)]).limit(limit)
     out = []
     async for d in cur:
         if hasattr(d.get("timestamp"),"isoformat"): d["timestamp"] = d["timestamp"].isoformat()
@@ -149,25 +166,36 @@ async def get_activity(limit: int = 100, user=Depends(get_current_user)):
 
 
 @router.get("/stats")
-async def stats(user=Depends(get_current_user)):
+async def stats(
+    user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
+    files_repo    = FingerprintedFilesRepository(db, org_id)
+    activity_repo = ActivityRepository(db, org_id)
+    alerts_repo   = AlertsRepository(db, org_id)
+
     is_admin = user.get("role") in ("admin","manager")
     fq = {} if is_admin else {"owner_id": user["_id"]}
     aq = {} if is_admin else {"user_id": user["_id"]}
     return {
-        "total_files":  await fingerprints_collection.count_documents(fq),
-        "high_risk":    await fingerprints_collection.count_documents({**fq,"risk_level":"HIGH"}),
-        "medium_risk":  await fingerprints_collection.count_documents({**fq,"risk_level":"MEDIUM"}),
-        "low_risk":     await fingerprints_collection.count_documents({**fq,"risk_level":"LOW"}),
-        "blocked":      await fingerprints_collection.count_documents({**fq,"action_taken":"BLOCK"}),
-        "total_events": await activity_collection.count_documents(aq),
-        "alerts":       await alerts_collection.count_documents({"read":False}),
+        "total_files":  await files_repo.count(fq),
+        "high_risk":    await files_repo.count({**fq,"risk_level":"HIGH"}),
+        "medium_risk":  await files_repo.count({**fq,"risk_level":"MEDIUM"}),
+        "low_risk":     await files_repo.count({**fq,"risk_level":"LOW"}),
+        "blocked":      await files_repo.count({**fq,"action_taken":"BLOCK"}),
+        "total_events": await activity_repo.count(aq),
+        "alerts":       await alerts_repo.count({"read":False}),
     }
 
 
 @router.get("/alerts")
-async def get_alerts(user=Depends(get_current_user)):
+async def get_alerts(
+    user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
+    repo = AlertsRepository(db, org_id)
     q = {} if user.get("role") in ("admin","manager") else {"user_id": user["_id"]}
-    cur = alerts_collection.find(q, sort=[("timestamp",-1)]).limit(30)
+    cur = repo.find_many(q, sort=[("timestamp",-1)]).limit(30)
     out = []
     async for d in cur:
         if hasattr(d.get("timestamp"),"isoformat"): d["timestamp"] = d["timestamp"].isoformat()
@@ -176,33 +204,38 @@ async def get_alerts(user=Depends(get_current_user)):
 
 
 @router.post("/alerts/{alert_id}/read")
-async def mark_alert_read(alert_id: str, user=Depends(get_current_user)):
+async def mark_alert_read(
+    alert_id: str, user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
     """
     Acknowledge an alert. A plain user may only acknowledge alerts raised
-    against their own activity; admins and managers may acknowledge any.
+    against their own activity; admins and managers may acknowledge any
+    alert within their own organisation.
     """
+    repo = AlertsRepository(db, org_id)
     q = {"_id": alert_id}
     if user.get("role") not in ("admin", "manager"):
         q["user_id"] = user["_id"]
 
-    result = await alerts_collection.update_one(
+    result = await repo.update_one(
         q, {"$set": {"read": True,
                      "read_by": user["name"],
                      "read_at": datetime.now(timezone.utc)}}
     )
     if result.matched_count == 0:
-        from fastapi import HTTPException
         raise HTTPException(404, "That alert no longer exists.")
 
-    await log_event(user["_id"], user["name"], "alert_acknowledged",
+    await log_event(db, org_id, user["_id"], user["name"], "alert_acknowledged",
                     extra={"alert_id": alert_id})
     return {"acknowledged": True, "alert_id": alert_id}
 
 
 @router.get("/ueba")
-async def ueba_overview(user=Depends(get_current_user)):
-    from services.ueba_service import get_ueba_dashboard
+async def ueba_overview(
+    user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
     if user.get("role") not in ("admin","manager"):
-        from fastapi import HTTPException
         raise HTTPException(403, "Admin access required")
-    return await get_ueba_dashboard(user.get("org_id"))
+    return await get_ueba_dashboard(db, org_id)

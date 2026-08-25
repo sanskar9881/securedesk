@@ -1,28 +1,32 @@
 import io
 from datetime import datetime, timedelta, timezone
-from database import db
 
-files_col    = db["fingerprinted_files"]
-activity_col = db["activity_logs"]
-alerts_col   = db["alerts"]
-users_col    = db["users"]
+from repositories.activity import ActivityRepository
+from repositories.alerts import AlertsRepository
+from repositories.fingerprinted_files import FingerprintedFilesRepository
+from repositories.users import UsersRepository
 
 
-async def gather_compliance_data(org_name: str, period_days: int = 30) -> dict:
-    """Collect all data needed for the compliance report."""
+async def gather_compliance_data(db, org_id: str, org_name: str, period_days: int = 30) -> dict:
+    """Collect all data needed for the compliance report — this org only."""
+    files_repo    = FingerprintedFilesRepository(db, org_id)
+    activity_repo = ActivityRepository(db, org_id)
+    alerts_repo   = AlertsRepository(db, org_id)
+    users_repo    = UsersRepository(db, org_id)
+
     since = datetime.now(timezone.utc) - timedelta(days=period_days)
-    total_files  = await files_col.count_documents({})
-    high_risk    = await files_col.count_documents({"risk_level": "HIGH"})
-    medium_risk  = await files_col.count_documents({"risk_level": "MEDIUM"})
-    low_risk     = await files_col.count_documents({"risk_level": "LOW"})
-    blocked      = await files_col.count_documents({"action_taken": "BLOCK"})
-    total_events = await activity_col.count_documents({"timestamp": {"$gte": since}})
-    alerts_count = await alerts_col.count_documents({"timestamp": {"$gte": since}})
-    total_users  = await users_col.count_documents({})
+    total_files  = await files_repo.count({})
+    high_risk    = await files_repo.count({"risk_level": "HIGH"})
+    medium_risk  = await files_repo.count({"risk_level": "MEDIUM"})
+    low_risk     = await files_repo.count({"risk_level": "LOW"})
+    blocked      = await files_repo.count({"action_taken": "BLOCK"})
+    total_events = await activity_repo.count({"timestamp": {"$gte": since}})
+    alerts_count = await alerts_repo.count({"timestamp": {"$gte": since}})
+    total_users  = await users_repo.count({})
 
     # High risk file details
     high_risk_files = []
-    cursor = files_col.find({"risk_level": "HIGH"}, sort=[("created_at", -1)]).limit(10)
+    cursor = files_repo.find_many({"risk_level": "HIGH"}, sort=[("created_at", -1)]).limit(10)
     async for f in cursor:
         ts = f.get("created_at", datetime.now(timezone.utc))
         high_risk_files.append({

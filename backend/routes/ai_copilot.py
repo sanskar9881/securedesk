@@ -6,8 +6,13 @@ GET  /api/ai/query/history — past queries
 import uuid
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
+
+from core.database import get_db
+from core.dependencies import get_tenant_id
 from pydantic import BaseModel
-from database import db, fingerprints_collection, activity_collection
+from repositories.activity import ActivityRepository
+from repositories.copilot_queries import CopilotQueriesRepository
+from repositories.fingerprinted_files import FingerprintedFilesRepository
 from routes.auth import get_current_user
 from services.ai_service import copilot_answer
 
@@ -37,7 +42,7 @@ def _parse(q: str) -> dict:
     return i
 
 
-async def _build_context(intent: dict, user: dict) -> str:
+async def _build_context(db, org_id: str, intent: dict, user: dict) -> str:
     is_admin = user.get("role") in ("admin", "manager")
     parts, tq = [], {}
     if intent["days"]:
@@ -47,7 +52,7 @@ async def _build_context(intent: dict, user: dict) -> str:
         fq = {} if is_admin else {"owner_id": user["_id"]}
         if intent["risk"]:   fq["risk_level"]   = intent["risk"]
         if tq:               fq["created_at"]   = tq
-        cur = fingerprints_collection.find(fq, sort=[("created_at",-1)]).limit(25)
+        cur = FingerprintedFilesRepository(db, org_id).find_many(fq, sort=[("created_at",-1)]).limit(25)
         rows = []
         async for d in cur:
             ts = d.get("created_at","")
@@ -60,7 +65,7 @@ async def _build_context(intent: dict, user: dict) -> str:
         if intent["risk"]:   aq["risk_level"] = intent["risk"]
         if tq:               aq["timestamp"]  = tq
         if intent["action"]: aq["action"]     = intent["action"]
-        cur = activity_collection.find(aq, sort=[("timestamp",-1)]).limit(30)
+        cur = ActivityRepository(db, org_id).find_many(aq, sort=[("timestamp",-1)]).limit(30)
         rows = []
         async for d in cur:
             ts = d.get("timestamp","")
@@ -72,13 +77,16 @@ async def _build_context(intent: dict, user: dict) -> str:
 
 
 @router.post("/query")
-async def ai_query(body: QueryIn, user=Depends(get_current_user)):
+async def ai_query(
+    body: QueryIn, user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
     if len(body.question.strip()) < 3:
         raise HTTPException(400, "Question too short")
     intent  = _parse(body.question)
-    context = await _build_context(intent, user)
+    context = await _build_context(db, org_id, intent, user)
     answer  = await copilot_answer(body.question, context, user["name"])
-    await db["copilot_queries"].insert_one({
+    await CopilotQueriesRepository(db, org_id).insert_one({
         "_id": str(uuid.uuid4()), "user_id": user["_id"], "user_name": user["name"],
         "question": body.question, "answer": answer[:600], "timestamp": datetime.now(timezone.utc),
     })
@@ -86,9 +94,12 @@ async def ai_query(body: QueryIn, user=Depends(get_current_user)):
 
 
 @router.get("/query/history")
-async def history(user=Depends(get_current_user)):
+async def history(
+    user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
     q = {} if user.get("role") in ("admin","manager") else {"user_id": user["_id"]}
-    cur = db["copilot_queries"].find(q, sort=[("timestamp",-1)]).limit(20)
+    cur = CopilotQueriesRepository(db, org_id).find_many(q, sort=[("timestamp",-1)]).limit(20)
     out = []
     async for d in cur:
         if hasattr(d.get("timestamp"),"isoformat"): d["timestamp"] = d["timestamp"].isoformat()

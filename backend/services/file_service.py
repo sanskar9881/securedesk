@@ -1,6 +1,9 @@
-import hashlib, io
+import hashlib
+import io
+import uuid
 from datetime import datetime, timezone
-from database import fingerprints_collection
+
+from repositories.fingerprinted_files import FingerprintedFilesRepository
 
 
 def extract_text(content: bytes, filename: str) -> str:
@@ -24,23 +27,35 @@ def sha256(content: bytes) -> str:
 
 
 async def save_fingerprint(
+    db, org_id: str,
     file_hash: str, filename: str, owner_id: str, owner_name: str,
     file_size: int, risk_level: str, action_taken: str, reasons: list,
     regex_findings: dict,
 ) -> bool:
-    """Store fingerprint. Returns True if duplicate."""
-    existing = await fingerprints_collection.find_one({"_id": file_hash})
+    """Store fingerprint. Returns True if duplicate.
+
+    "Duplicate" means this org has seen this exact content before — not
+    whether any org has. The document's Mongo _id is a fresh uuid rather
+    than the content hash itself: two different organisations uploading
+    byte-identical files would otherwise collide on the same _id (Mongo
+    _id is unique per collection, not per tenant), and worse, sharing a
+    global hash space would let one org infer that specific file content
+    had already been seen elsewhere. `hash` stays a plain (org-scoped)
+    field, looked up rather than used as the key.
+    """
+    repo = FingerprintedFilesRepository(db, org_id)
+    existing = await repo.find_one({"hash": file_hash})
     if existing:
-        await fingerprints_collection.update_one(
-            {"_id": file_hash},
+        await repo.update_one(
+            {"hash": file_hash},
             {"$set":  {"last_accessed": datetime.now(timezone.utc)},
              "$push": {"actions_log": {"action": "re-uploaded", "by": owner_name,
                                        "at": datetime.now(timezone.utc).isoformat()}}}
         )
-        return True   # duplicate
+        return True   # duplicate within this org
 
-    await fingerprints_collection.insert_one({
-        "_id":           file_hash,
+    await repo.insert_one({
+        "_id":           str(uuid.uuid4()),
         "filename":      filename,
         "owner_id":      owner_id,
         "owner_name":    owner_name,

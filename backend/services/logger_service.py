@@ -1,9 +1,12 @@
 import uuid
 from datetime import datetime, timezone
-from database import activity_collection, alerts_collection
+
+from repositories.activity import ActivityRepository
+from repositories.alerts import AlertsRepository
 
 
 async def log_event(
+    db, org_id: str,
     user_id: str,
     user_name: str,
     action: str,          # upload | share | download | analyze | login | block
@@ -27,11 +30,11 @@ async def log_event(
         "timestamp":    datetime.now(timezone.utc),
         **(extra or {}),
     }
-    await activity_collection.insert_one(doc)
+    await ActivityRepository(db, org_id).insert_one(doc)
 
     # Auto-create alert for HIGH risk
     if risk_level == "HIGH":
-        await alerts_collection.insert_one({
+        await AlertsRepository(db, org_id).insert_one({
             "_id":       str(uuid.uuid4()),
             "user_id":   user_id,
             "user_name": user_name,

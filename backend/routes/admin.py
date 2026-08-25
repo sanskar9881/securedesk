@@ -7,7 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from database import transactions_collection, users_collection
+from core.database import get_db
+from core.dependencies import get_tenant_id
+from repositories.transactions import TransactionsRepository
+from repositories.users import UsersRepository
 from core.rbac import (
     ADMIN, MANAGER, USER,
     assert_can_act_on, is_admin, require_admin, require_staff,
@@ -21,30 +24,30 @@ OWNER_FIELD = "sender_id"
 
 
 @router.get("/stats")
-async def get_stats(user=Depends(require_staff)):
+async def get_stats(
+    user=Depends(require_staff),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
     """
     Posture summary. Admin sees the whole organisation; a manager sees only
     the people who report to them, so the same screen answers "how are WE
     doing" at whichever level the viewer operates.
     """
+    tx_repo = TransactionsRepository(db, org_id)
     scope = await visibility_filter(user, OWNER_FIELD)
 
     def within(extra: dict | None = None) -> dict:
         return {**scope, **(extra or {})}
 
-    total = await transactions_collection.count_documents(within())
-    suspicious = await transactions_collection.count_documents(within({"classification": "suspicious"}))
-    legitimate = await transactions_collection.count_documents(within({"classification": "legitimate"}))
-    high_risk = await transactions_collection.count_documents(within({"severity": "high"}))
+    total = await tx_repo.count(within())
+    suspicious = await tx_repo.count(within({"classification": "suspicious"}))
+    legitimate = await tx_repo.count(within({"classification": "legitimate"}))
+    high_risk = await tx_repo.count(within({"severity": "high"}))
     week_ago = datetime.now(timezone.utc) - timedelta(days=7)
-    recent = await transactions_collection.count_documents(within({"timestamp": {"$gte": week_ago}}))
+    recent = await tx_repo.count(within({"timestamp": {"$gte": week_ago}}))
 
     ids = await visible_user_ids(user)
-    total_users = (
-        await users_collection.count_documents({})
-        if ids is None
-        else await users_collection.count_documents({"_id": {"$in": ids}})
-    )
+    total_users = await UsersRepository(db, org_id).count({"_id": {"$in": ids}})
 
     return {
         "total": total,
@@ -66,7 +69,9 @@ async def get_logs(
     severity: Optional[str] = None,
     search: Optional[str] = None,
     user=Depends(require_staff),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
 ):
+    tx_repo = TransactionsRepository(db, org_id)
     query = await visibility_filter(user, OWNER_FIELD)
     if classification:
         query["classification"] = classification
@@ -79,9 +84,9 @@ async def get_logs(
             {"recipient_email": {"$regex": search, "$options": "i"}},
         ]
 
-    total = await transactions_collection.count_documents(query)
+    total = await tx_repo.count(query)
     skip = (page - 1) * limit
-    cursor = transactions_collection.find(
+    cursor = tx_repo.find_many(
         query, sort=[("timestamp", -1)]
     ).skip(skip).limit(limit)
 
@@ -96,16 +101,17 @@ async def get_logs(
 
 
 @router.get("/users")
-async def get_users(user=Depends(require_staff)):
+async def get_users(
+    user=Depends(require_staff),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
     """
     The people directory. An admin sees every account in the organisation; a
     manager sees only their own reports — they have no view of admins or of
     other managers' teams.
     """
     ids = await visible_user_ids(user)
-    query = {} if ids is None else {"_id": {"$in": ids}}
-
-    cursor = users_collection.find(query, {"password": 0})
+    cursor = UsersRepository(db, org_id).find_many({"_id": {"$in": ids}}, projection={"password": 0})
     results = []
     async for u in cursor:
         u["_id"] = str(u["_id"])
@@ -120,7 +126,10 @@ class RoleChange(BaseModel):
 
 
 @router.patch("/users/{user_id}/role")
-async def change_role(user_id: str, body: RoleChange, actor=Depends(require_admin)):
+async def change_role(
+    user_id: str, body: RoleChange, actor=Depends(require_admin),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
     """
     Grant or revoke a role. Admin-only, deliberately: this is the one operation
     that can manufacture privilege, so managers must never reach it.
@@ -134,18 +143,21 @@ async def change_role(user_id: str, body: RoleChange, actor=Depends(require_admi
         # Losing the last admin would leave the organisation unmanageable.
         raise HTTPException(400, "You can't remove your own administrator access.")
 
-    await users_collection.update_one({"_id": user_id}, {"$set": {"role": body.role}})
+    await UsersRepository(db, org_id).update_one({"_id": user_id}, {"$set": {"role": body.role}})
     return {"user_id": user_id, "role": body.role}
 
 
 @router.get("/export")
-async def export_csv(user=Depends(require_admin)):
+async def export_csv(
+    user=Depends(require_admin),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
     """
     Full data export — admin only. A manager's oversight is for coaching their
     team, not for extracting the organisation's dataset.
     """
     query = await visibility_filter(user, OWNER_FIELD)
-    cursor = transactions_collection.find(query, sort=[("timestamp", -1)])
+    cursor = TransactionsRepository(db, org_id).find_many(query, sort=[("timestamp", -1)])
 
     output = io.StringIO()
     writer = csv.writer(output)

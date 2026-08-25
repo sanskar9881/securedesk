@@ -1,18 +1,15 @@
+from collections import Counter
 from datetime import datetime, timedelta, timezone
-from database import db
 
-activity_col = db["activity_logs"]
-ueba_col     = db["ueba_profiles"]
-alerts_col   = db["alerts"]
+from repositories.activity import ActivityRepository
+from repositories.alerts import AlertsRepository
 
 
-async def get_user_baseline(user_id: str) -> dict:
+async def get_user_baseline(db, org_id: str, user_id: str) -> dict:
     """Calculate normal behavior for a user from last 30 days of logs."""
     since  = datetime.now(timezone.utc) - timedelta(days=30)
-    cursor = activity_col.find({
-        "user_id": user_id,
-        "timestamp": {"$gte": since}
-    })
+    repo   = ActivityRepository(db, org_id)
+    cursor = repo.find_many({"user_id": user_id, "timestamp": {"$gte": since}})
     hours, actions, count = [], [], 0
     async for doc in cursor:
         ts = doc.get("timestamp")
@@ -23,7 +20,6 @@ async def get_user_baseline(user_id: str) -> dict:
     if count == 0:
         return {"avg_daily_actions": 10, "typical_hours": list(range(8, 19)),
                 "common_actions": ["upload", "analyze"], "total_30d": 0}
-    from collections import Counter
     hour_counts  = Counter(hours)
     typical_hours = [h for h, _ in hour_counts.most_common(12)]
     common_actions = list({a for a in actions})
@@ -35,15 +31,16 @@ async def get_user_baseline(user_id: str) -> dict:
     }
 
 
-async def check_anomalies(user_id: str, user_name: str, action: str,
+async def check_anomalies(db, org_id: str, user_id: str, user_name: str, action: str,
                            filename: str = "", risk_level: str = "") -> list[str]:
     """
     Compare current activity against baseline.
     Returns list of anomaly descriptions (empty = normal).
     """
-    anomalies = []
-    baseline  = await get_user_baseline(user_id)
-    now       = datetime.now(timezone.utc)
+    anomalies    = []
+    activity_repo = ActivityRepository(db, org_id)
+    baseline     = await get_user_baseline(db, org_id, user_id)
+    now          = datetime.now(timezone.utc)
 
     # Anomaly 1 — After-hours activity
     if now.hour < 7 or now.hour > 21:
@@ -51,10 +48,7 @@ async def check_anomalies(user_id: str, user_name: str, action: str,
 
     # Anomaly 2 — High volume in last hour
     one_hour_ago = now - timedelta(hours=1)
-    recent_count = await activity_col.count_documents({
-        "user_id":   user_id,
-        "timestamp": {"$gte": one_hour_ago}
-    })
+    recent_count = await activity_repo.count({"user_id": user_id, "timestamp": {"$gte": one_hour_ago}})
     if recent_count > 30:
         anomalies.append(f"Unusual volume — {recent_count} actions in the last hour")
 
@@ -64,39 +58,37 @@ async def check_anomalies(user_id: str, user_name: str, action: str,
 
     # Anomaly 4 — Large download burst (50+ files in a day)
     today_start  = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    today_count  = await activity_col.count_documents({
-        "user_id":   user_id,
-        "timestamp": {"$gte": today_start}
-    })
+    today_count  = await activity_repo.count({"user_id": user_id, "timestamp": {"$gte": today_start}})
     if today_count > 50:
         anomalies.append(f"Unusually high activity today — {today_count} actions (normal: ~{int(baseline['avg_daily_actions'])+1}/day)")
 
     # Store anomalies as alerts
-    for anomaly in anomalies:
-        await alerts_col.insert_one({
-            "_id":       str(__import__("uuid").uuid4()),
-            "type":      "UEBA_ANOMALY",
-            "user_id":   user_id,
-            "user_name": user_name,
-            "message":   f"⚠️ Anomaly detected for {user_name}: {anomaly}",
-            "detail":    anomaly,
-            "action":    action,
-            "filename":  filename,
-            "read":      False,
-            "severity":  "HIGH" if risk_level == "HIGH" else "MEDIUM",
-            "timestamp": now,
-        })
+    if anomalies:
+        alerts_repo = AlertsRepository(db, org_id)
+        for anomaly in anomalies:
+            await alerts_repo.insert_one({
+                "_id":       str(__import__("uuid").uuid4()),
+                "type":      "UEBA_ANOMALY",
+                "user_id":   user_id,
+                "user_name": user_name,
+                "message":   f"⚠️ Anomaly detected for {user_name}: {anomaly}",
+                "detail":    anomaly,
+                "action":    action,
+                "filename":  filename,
+                "read":      False,
+                "severity":  "HIGH" if risk_level == "HIGH" else "MEDIUM",
+                "timestamp": now,
+            })
     return anomalies
 
 
-async def get_ueba_dashboard(org_id: str = None) -> dict:
+async def get_ueba_dashboard(db, org_id: str) -> dict:
     """Get UEBA overview for admin dashboard."""
-    q = {}
-    if org_id:
-        q["org_id"] = org_id
+    activity_repo = ActivityRepository(db, org_id)
+    alerts_repo   = AlertsRepository(db, org_id)
     since  = datetime.now(timezone.utc) - timedelta(days=7)
-    recent = await activity_col.count_documents({**q, "timestamp": {"$gte": since}})
-    alerts = await alerts_col.count_documents({"type": "UEBA_ANOMALY", "read": False})
+    recent = await activity_repo.count({"timestamp": {"$gte": since}})
+    alerts = await alerts_repo.count({"type": "UEBA_ANOMALY", "read": False})
     high_risk_users = []
     pipeline = [
         {"$match": {"timestamp": {"$gte": since}, "risk_level": "HIGH"}},
@@ -104,7 +96,8 @@ async def get_ueba_dashboard(org_id: str = None) -> dict:
         {"$sort": {"count": -1}},
         {"$limit": 5}
     ]
-    async for doc in activity_col.aggregate(pipeline):
+    cursor = await activity_repo.aggregate(pipeline)
+    async for doc in cursor:
         high_risk_users.append({"user": doc["_id"], "high_risk_actions": doc["count"]})
     return {
         "week_activities": recent,

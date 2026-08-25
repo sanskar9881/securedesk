@@ -158,7 +158,12 @@ INDEXES: dict[str, list[tuple[list[tuple[str, int]], dict[str, Any]]]] = {
     ],
     "fingerprinted_files": [
         ([("owner_id", 1)], {"name": "owner_idx"}),
-        ([("hash", 1)], {"name": "hash_idx"}),
+        # Compound and unique per (org_id, hash), not on hash alone: the
+        # document's _id is now a fresh uuid (see services/file_service.py),
+        # since a bare content-hash _id would collide the moment two
+        # different organisations uploaded byte-identical files — Mongo's
+        # _id uniqueness is collection-wide, not per-tenant.
+        ([("org_id", 1), ("hash", 1)], {"name": "org_hash_unique_idx", "unique": True}),
     ],
     "whatsapp_logs": [
         ([("user_id", 1), ("timestamp", -1)], {"name": "user_time_idx"}),
@@ -182,6 +187,16 @@ INDEXES: dict[str, list[tuple[list[tuple[str, int]], dict[str, Any]]]] = {
 }
 
 
+# Index names retired by a later spec change, dropped on startup before the
+# current INDEXES are created. Superseded by org_hash_unique_idx: the old
+# hash_idx was non-unique and scoped to hash alone, which would have allowed
+# two organisations' fingerprint documents to collide — see the comment on
+# org_hash_unique_idx above.
+_RETIRED_INDEXES: dict[str, list[str]] = {
+    "fingerprinted_files": ["hash_idx"],
+}
+
+
 async def ensure_indexes(database: AsyncIOMotorDatabase) -> None:
     """Create every declared index. Idempotent; safe on every boot.
 
@@ -189,6 +204,14 @@ async def ensure_indexes(database: AsyncIOMotorDatabase) -> None:
     degrade query performance, not take the whole service down. Phase 7's
     /ready endpoint is what will report the connection as unhealthy.
     """
+    for collection, names in _RETIRED_INDEXES.items():
+        for name in names:
+            try:
+                await database[collection].drop_index(name)
+                log.info("dropped retired index %s on %s", name, collection)
+            except Exception:
+                pass  # already gone — the common case after the first boot
+
     created = 0
     for collection, specs in INDEXES.items():
         for keys, options in specs:

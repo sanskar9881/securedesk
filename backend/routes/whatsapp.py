@@ -2,12 +2,14 @@ import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from database import db
+
+from core.database import get_db
+from core.dependencies import get_tenant_id
+from repositories.activity import ActivityRepository
+from repositories.whatsapp_logs import WhatsAppLogsRepository
 from routes.auth import get_current_user
 
 router  = APIRouter()
-wa_col  = db["whatsapp_logs"]
-act_col = db["activity_logs"]
 
 
 class WAScanRequest(BaseModel):
@@ -19,7 +21,10 @@ class WAScanRequest(BaseModel):
 
 
 @router.post("/scan")
-async def scan_whatsapp_share(body: WAScanRequest, user=Depends(get_current_user)):
+async def scan_whatsapp_share(
+    body: WAScanRequest, user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
     """Called by Chrome extension when file upload detected on WhatsApp Web."""
     from services.regex_engine import scan, score as risk_score
     from services.ai_service import classify_file
@@ -51,10 +56,10 @@ async def scan_whatsapp_share(body: WAScanRequest, user=Depends(get_current_user
         "timestamp":  datetime.now(timezone.utc),
         "flagged":    risk_level in ("HIGH","MEDIUM"),
     }
-    await wa_col.insert_one(log_doc)
+    await WhatsAppLogsRepository(db, org_id).insert_one(log_doc)
 
     # Also log to main activity
-    await act_col.insert_one({
+    await ActivityRepository(db, org_id).insert_one({
         "_id":          str(uuid.uuid4()),
         "user_id":      user["_id"],
         "user_name":    user["name"],
@@ -82,10 +87,14 @@ async def scan_whatsapp_share(body: WAScanRequest, user=Depends(get_current_user
 
 
 @router.get("/logs")
-async def whatsapp_logs(limit: int = 100, user=Depends(get_current_user)):
+async def whatsapp_logs(
+    limit: int = 100, user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
+    repo = WhatsAppLogsRepository(db, org_id)
     is_admin = user.get("role") in ("admin","manager")
     q = {} if is_admin else {"user_id": user["_id"]}
-    cur = wa_col.find(q, sort=[("timestamp",-1)]).limit(limit)
+    cur = repo.find_many(q, sort=[("timestamp",-1)]).limit(limit)
     out = []
     async for d in cur:
         if hasattr(d.get("timestamp"),"isoformat"): d["timestamp"] = d["timestamp"].isoformat()
@@ -94,10 +103,14 @@ async def whatsapp_logs(limit: int = 100, user=Depends(get_current_user)):
 
 
 @router.get("/stats")
-async def whatsapp_stats(user=Depends(get_current_user)):
+async def whatsapp_stats(
+    user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
+    repo = WhatsAppLogsRepository(db, org_id)
     is_admin = user.get("role") in ("admin","manager")
     q = {} if is_admin else {"user_id": user["_id"]}
-    total   = await wa_col.count_documents(q)
-    flagged = await wa_col.count_documents({**q, "flagged": True})
-    high    = await wa_col.count_documents({**q, "risk_level": "HIGH"})
+    total   = await repo.count(q)
+    flagged = await repo.count({**q, "flagged": True})
+    high    = await repo.count({**q, "risk_level": "HIGH"})
     return {"total_shares": total, "flagged": flagged, "high_risk": high}

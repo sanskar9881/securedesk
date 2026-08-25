@@ -1,16 +1,18 @@
 import csv, io
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from database import db
+
+from core.database import get_db
+from core.dependencies import get_tenant_id
+from repositories.activity import ActivityRepository
+from repositories.fingerprinted_files import FingerprintedFilesRepository
+from repositories.ip_logs import IPLogsRepository
+from repositories.nda import NdaAgreementsRepository
+from repositories.whatsapp_logs import WhatsAppLogsRepository
 from routes.auth import get_current_user
 
-router       = APIRouter()
-activity_col = db["activity_logs"]
-files_col    = db["fingerprinted_files"]
-wa_col       = db["whatsapp_logs"]
-nda_col      = db["nda_agreements"]
-ip_col       = db["ip_logs"]
+router = APIRouter()
 
 
 def make_csv(headers: list, rows: list) -> StreamingResponse:
@@ -27,10 +29,13 @@ def make_csv(headers: list, rows: list) -> StreamingResponse:
 
 
 @router.get("/activity.csv")
-async def export_activity(user=Depends(get_current_user)):
+async def export_activity(
+    user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
     is_admin = user.get("role") in ("admin", "manager")
     q = {} if is_admin else {"user_id": user["_id"]}
-    cur = activity_col.find(q, sort=[("timestamp", -1)]).limit(5000)
+    cur = ActivityRepository(db, org_id).find_many(q, sort=[("timestamp", -1)]).limit(5000)
     rows = []
     async for d in cur:
         ts = d.get("timestamp", "")
@@ -51,10 +56,13 @@ async def export_activity(user=Depends(get_current_user)):
 
 
 @router.get("/files.csv")
-async def export_files(user=Depends(get_current_user)):
+async def export_files(
+    user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
     is_admin = user.get("role") in ("admin", "manager")
     q = {} if is_admin else {"owner_id": user["_id"]}
-    cur = files_col.find(q, sort=[("created_at", -1)]).limit(5000)
+    cur = FingerprintedFilesRepository(db, org_id).find_many(q, sort=[("created_at", -1)]).limit(5000)
     rows = []
     async for d in cur:
         ts = d.get("created_at", "")
@@ -76,10 +84,13 @@ async def export_files(user=Depends(get_current_user)):
 
 
 @router.get("/whatsapp.csv")
-async def export_whatsapp(user=Depends(get_current_user)):
+async def export_whatsapp(
+    user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
     is_admin = user.get("role") in ("admin", "manager")
     q = {} if is_admin else {"user_id": user["_id"]}
-    cur = wa_col.find(q, sort=[("timestamp", -1)]).limit(5000)
+    cur = WhatsAppLogsRepository(db, org_id).find_many(q, sort=[("timestamp", -1)]).limit(5000)
     rows = []
     async for d in cur:
         ts = d.get("timestamp", "")
@@ -100,11 +111,13 @@ async def export_whatsapp(user=Depends(get_current_user)):
 
 
 @router.get("/nda-signed.csv")
-async def export_ndas(user=Depends(get_current_user)):
+async def export_ndas(
+    user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
     if user.get("role") not in ("admin", "manager"):
-        from fastapi import HTTPException
         raise HTTPException(403, "Admin access required")
-    cur = nda_col.find({}, sort=[("signed_at", -1)])
+    cur = NdaAgreementsRepository(db, org_id).find_many({}, sort=[("signed_at", -1)])
     rows = []
     async for d in cur:
         ts = d.get("signed_at", "")
@@ -125,10 +138,13 @@ async def export_ndas(user=Depends(get_current_user)):
 
 
 @router.post("/log-ip")
-async def log_ip(request: Request, user=Depends(get_current_user)):
+async def log_ip(
+    request: Request, user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
     """Log IP address on every login — stored for audit trail."""
     ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
-    await ip_col.insert_one({
+    await IPLogsRepository(db, org_id).insert_one({
         "user_id":   user["_id"],
         "user_name": user["name"],
         "ip":        ip.split(",")[0].strip(),
@@ -139,11 +155,13 @@ async def log_ip(request: Request, user=Depends(get_current_user)):
 
 
 @router.get("/ip-logs")
-async def get_ip_logs(user=Depends(get_current_user)):
+async def get_ip_logs(
+    user=Depends(get_current_user),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
     if user.get("role") not in ("admin", "manager"):
-        from fastapi import HTTPException
         raise HTTPException(403, "Admin access required")
-    cur = ip_col.find({}, sort=[("timestamp", -1)]).limit(200)
+    cur = IPLogsRepository(db, org_id).find_many({}, sort=[("timestamp", -1)]).limit(200)
     out = []
     async for d in cur:
         if hasattr(d.get("timestamp"), "isoformat"): d["timestamp"] = d["timestamp"].isoformat()
