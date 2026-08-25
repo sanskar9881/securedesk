@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "SecureDesk",
+  "version": "2.0.0",
+  "description": "DPDP-compliant data loss prevention for WhatsApp Web — blocks sensitive files before they send.",
+  "minimum_chrome_version": "116",
+  "permissions": ["storage", "alarms"],
+  "host_permissions": [
+    "https://web.whatsapp.com/*",
+    "https://securedesk-backend.onrender.com/*",
+    "http://localhost:8000/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [{
+    "matches": ["https://web.whatsapp.com/*"],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": { "32": "icons/icon-32.png", "128": "icons/icon-128.png" }
+  },
+  "icons": { "32": "icons/icon-32.png", "128": "icons/icon-128.png" }
+}
