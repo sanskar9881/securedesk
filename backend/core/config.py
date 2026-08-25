@@ -130,18 +130,20 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("SECRET_KEY", "JWT_SECRET"),
     )
     ALGORITHM: str = "HS256"
-    # Deliberately short: was 1440 (24h) before Phase 4, which made the
-    # access token itself the durable credential — an intercepted token
-    # remained valid for a full day with no way to revoke it. Session
-    # length now comes from the refresh token instead (see
-    # REFRESH_TOKEN_EXPIRE_DAYS below), which IS revocable and rotates on
-    # every use. This is a behaviour change, not a contract break: the
-    # response shape is unchanged and additive (routes/auth.py now also
-    # returns refresh_token). A client that does not yet call
-    # POST /api/auth/refresh will simply see its session expire after 15
-    # minutes instead of 24 hours — the frontend needs a refresh-on-401 (or
-    # proactive) interceptor before this should reach production traffic.
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    # TODO(revert-to-15): Phase 4's design intent is 15 — the access token
+    # itself becomes a short-lived, low-value credential and real session
+    # length comes from the revocable, rotating refresh token instead (see
+    # REFRESH_TOKEN_EXPIRE_DAYS below). Temporarily reverted to the
+    # pre-Phase-4 value of 1440 (24h) because the deployed frontend has no
+    # refresh-on-401 (or proactive) interceptor yet — it stores
+    # access_token and ignores refresh_token entirely, so at 15min every
+    # live session would start expiring mid-use. refresh_token issuance
+    # and POST /api/auth/refresh are unaffected by this and already work;
+    # only the access token's own lifetime is reverted. Put this back to
+    # 15 the same change that ships the frontend interceptor, not before —
+    # leaving it at 1440 defeats the point of Phase 4 (an intercepted
+    # access token stays valid for a full day with no revocation path).
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     # Refresh tokens rotate on every use (see services/token_service.py).
     # Each rotation slides the expiry forward by this many days, capped in
     # absolute terms by REFRESH_TOKEN_ABSOLUTE_MAX_DAYS regardless of how
