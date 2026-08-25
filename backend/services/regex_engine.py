@@ -59,8 +59,32 @@ def scan(text: str, filename: str = "") -> dict:
     return findings
 
 
-def score(findings: dict) -> tuple[str, str, list[str]]:
-    """Convert findings to risk_level, action, reasons."""
+HIGH_THRESHOLD = 60
+MEDIUM_THRESHOLD = 25
+
+
+def classify_score(total_score: int) -> tuple[str, str]:
+    """The numeric-score -> (risk_level, action) mapping, factored out so
+    anything that adjusts total_score after the fact — vision_service's
+    escalation being the reason this exists — reclassifies through the
+    exact same thresholds regex findings do, rather than a second,
+    possibly-drifting copy of 60/25."""
+    if total_score >= HIGH_THRESHOLD:
+        return "HIGH", "BLOCK"
+    elif total_score >= MEDIUM_THRESHOLD:
+        return "MEDIUM", "WARN"
+    return "LOW", "ALLOW"
+
+
+def score_detailed(findings: dict) -> tuple[int, str, str, list[str]]:
+    """Convert findings to (total_score, risk_level, action, reasons).
+
+    The numeric total_score is exposed (score() below discards it) because
+    vision_service needs it: the escalation formula is
+    `total_score = max(total_score, total_score + vision.risk_delta)`,
+    which only makes sense against the number, not the HIGH/MEDIUM/LOW
+    label derived from it.
+    """
     total_score = 0
     reasons     = []
 
@@ -81,7 +105,15 @@ def score(findings: dict) -> tuple[str, str, list[str]]:
         elif key == "ifsc":               reasons.append(f"🏦 Bank IFSC code(s): {cnt}")
 
     total_score = min(total_score, 100)
+    risk_level, action = classify_score(total_score)
+    return total_score, risk_level, action, reasons
 
-    if total_score >= 60:   return "HIGH",   "BLOCK", reasons
-    elif total_score >= 25: return "MEDIUM", "WARN",  reasons
-    else:                   return "LOW",    "ALLOW", reasons
+
+def score(findings: dict) -> tuple[str, str, list[str]]:
+    """Convert findings to risk_level, action, reasons.
+
+    Thin wrapper over score_detailed() kept for every existing caller that
+    doesn't need the numeric score — signature unchanged.
+    """
+    _, risk_level, action, reasons = score_detailed(findings)
+    return risk_level, action, reasons

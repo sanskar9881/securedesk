@@ -12,14 +12,15 @@ from repositories.alerts import AlertsRepository
 from repositories.fingerprinted_files import FingerprintedFilesRepository
 from routes.auth import get_current_user
 from services import evidence_service
-from services.regex_engine import scan, score
+from services.vision_service import analyze_image
+from services.regex_engine import classify_score, scan, score_detailed
 from services.ai_service import classify_file
 from services.file_service import extract_text, sha256, save_fingerprint
 from services.logger_service import log_event
 from services.watermark_service import apply_watermark
 from services.ueba_service import check_anomalies, get_ueba_dashboard
 from services.email_alert_service import send_alert_email
-from core.uploads import read_validated_upload
+from core.uploads import DOCUMENT_EXTENSIONS, IMAGE_EXTENSIONS, is_image, read_validated_upload
 
 router = APIRouter()
 log = logging.getLogger("securedesk.analyze")
@@ -132,17 +133,40 @@ async def analyze_upload(
     db               = Depends(get_db),
 ):
     # Streams with a hard size ceiling, rejects executables, and requires the
-    # sniffed magic bytes to agree with the declared extension.
-    upload   = await read_validated_upload(file)
+    # sniffed magic bytes to agree with the declared extension. Documents
+    # AND images — this is the one upload path with vision_service behind
+    # it (routes/files.py's /send stays document-only, see its call site).
+    upload   = await read_validated_upload(file, allowed_extensions=DOCUMENT_EXTENSIONS | IMAGE_EXTENSIONS)
     content  = upload.content
     filename = upload.filename
     text     = extract_text(content, filename)
     h        = sha256(content)
     findings = scan(text, filename)
-    risk_level, action, reasons = score(findings)
+    total_score, risk_level, action, reasons = score_detailed(findings)
 
     llm = {}
-    if use_llm:
+    vision: dict | None = None
+
+    if is_image(upload.extension):
+        # This is the fix for the fatal gap: extract_text() on a JPEG/PNG
+        # falls through to decoding raw image bytes as UTF-8 with errors
+        # ignored, which finds nothing — every photographed Aadhaar/PAN
+        # card scored LOW regardless of content. Text-based LLM
+        # classification is skipped here rather than run pointlessly on
+        # that same garbage text; vision_service looks at the actual pixels
+        # instead. Escalation-only: total_score can only go up from here.
+        result = await analyze_image(content)
+        total_score = min(100, max(total_score, total_score + result.risk_delta))
+        risk_level, action = classify_score(total_score)
+        reasons.extend(result.reasons)
+        vision = {
+            "document_types": result.document_types,
+            "confidence": result.confidence,
+            "risk_delta": result.risk_delta,
+            "unverified": result.unverified,
+            "provider": result.provider,
+        }
+    elif use_llm:
         llm = await classify_file(text, filename, findings)
         if llm.get("recommended_action") == "BLOCK" and action != "BLOCK":
             action, risk_level = "BLOCK", "HIGH"
@@ -175,6 +199,9 @@ async def analyze_upload(
         "risk_level": risk_level, "action": action, "reasons": reasons,
         "regex_findings": findings,
         "llm_summary": llm.get("sensitivity_reason") if llm else None,
+        "vision_document_types": vision["document_types"] if vision else None,
+        "vision_confidence": vision["confidence"] if vision else None,
+        "vision_unverified": vision["unverified"] if vision else None,
         "is_duplicate": is_dup, "watermarked": watermark,
     })
 
@@ -186,6 +213,7 @@ async def analyze_upload(
         "risk_level": risk_level, "recommended_action": action,
         "reasons": reasons or ["No sensitive data detected"],
         "regex_findings": findings, "llm_analysis": llm,
+        "vision_analysis": vision,
         "file_hash": h, "filename": filename,
         "file_size": len(content), "is_duplicate": is_dup,
         "watermarked": watermark,

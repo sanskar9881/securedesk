@@ -10,7 +10,7 @@ from core.dependencies import get_tenant_id
 from repositories.transactions import TransactionsRepository
 from routes.auth import get_current_user
 from ml.classifier import classify_transaction
-from core.uploads import read_validated_upload
+from core.uploads import DOCUMENT_EXTENSIONS, read_validated_upload
 
 router = APIRouter()
 
@@ -198,8 +198,12 @@ async def send_file(
     if file and file.filename:
         # Validated before the bytes are resident: size ceiling enforced while
         # streaming, executables rejected, content type confirmed by magic bytes
-        # rather than trusting the extension.
-        upload = await read_validated_upload(file)
+        # rather than trusting the extension. Documents only, explicitly — this
+        # endpoint has no vision analysis behind it, so an image upload here
+        # would silently fall through extract_text()'s garbage-decode path and
+        # always score LOW regardless of content. Image scanning lives at
+        # /api/dlp/analyze-upload, which does have vision_service behind it.
+        upload = await read_validated_upload(file, allowed_extensions=DOCUMENT_EXTENSIONS)
         filename = upload.filename
         content_bytes = upload.content
         file_size = upload.size

@@ -38,7 +38,19 @@ _SIGNATURES: list[tuple[int, bytes, str]] = [
     (0, b"PK\x05\x06", "zip"),
     (0, b"PK\x07\x08", "zip"),
     (0, b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", "ole"),  # legacy .doc/.xls
+    (0, b"\xff\xd8\xff", "jpeg"),
+    (0, b"\x89PNG\r\n\x1a\n", "png"),
+    # WEBP isn't a fixed-offset single signature — the container is RIFF
+    # (also used by WAV/AVI), with "WEBP" appearing at byte 8. Checked
+    # separately in _sniff() rather than forcing it into this table's shape.
 ]
+
+# Extensions vision_service.py accepts for image DLP scanning (Phase 3.5).
+# _ALLOWED (below) validates these the same way as any other extension —
+# this set exists so callers can name "the image ones" explicitly. See
+# DOCUMENT_EXTENSIONS / IMAGE_EXTENSIONS below for how call sites opt in
+# to one, the other, or both, rather than relying on an implicit default.
+IMAGE_EXTENSIONS: frozenset[str] = frozenset({"jpg", "jpeg", "png", "webp"})
 
 # Signatures that must NEVER be accepted, whatever the file is called.
 _EXECUTABLE_SIGNATURES: list[tuple[bytes, str]] = [
@@ -66,7 +78,18 @@ _ALLOWED: dict[str, set[str]] = {
     "log":  {"text"},
     "json": {"text"},
     "md":   {"text"},
+    "jpg":  {"jpeg"},
+    "jpeg": {"jpeg"},
+    "png":  {"png"},
+    "webp": {"webp"},
 }
+
+# Document-only extensions — the set every upload path used before images
+# were added, still the default read_validated_upload() falls back to when
+# a caller passes no allowed_extensions. Callers that want images too
+# (routes/analyze.py's scan endpoint) pass DOCUMENT_EXTENSIONS |
+# IMAGE_EXTENSIONS explicitly instead.
+DOCUMENT_EXTENSIONS: frozenset[str] = frozenset(_ALLOWED) - IMAGE_EXTENSIONS
 
 
 @dataclass(frozen=True)
@@ -89,6 +112,10 @@ def _sniff(head: bytes) -> str:
     for offset, sig, kind in _SIGNATURES:
         if head[offset:offset + len(sig)] == sig:
             return kind
+    # WEBP: RIFF container (offset 0) with "WEBP" at offset 8 — RIFF alone
+    # is shared with WAV/AVI, so both checks are required together.
+    if head[0:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "webp"
     # Treat as text only if it actually decodes and holds no NUL bytes.
     if b"\x00" in head[:8192]:
         return "binary"
@@ -126,7 +153,11 @@ async def read_validated_upload(
     filename = _safe_name(file.filename)
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
 
-    allowed = allowed_extensions if allowed_extensions is not None else set(_ALLOWED)
+    # Default is documents only — a caller that wants images has to say so
+    # (see DOCUMENT_EXTENSIONS / IMAGE_EXTENSIONS above). This keeps every
+    # existing call site's behaviour unchanged now that _ALLOWED itself
+    # also validates image extensions.
+    allowed = allowed_extensions if allowed_extensions is not None else DOCUMENT_EXTENSIONS
     if ext not in allowed:
         raise HTTPException(
             status_code=415,
@@ -167,6 +198,17 @@ async def read_validated_upload(
         )
 
     return ValidatedUpload(content=content, filename=filename, extension=ext, kind=kind, size=len(content))
+
+
+def is_image(extension: str) -> bool:
+    """True for the extensions vision_service.py can analyse.
+
+    Callers pass ValidatedUpload.extension, which is already the
+    magic-byte-confirmed type via read_validated_upload — this only
+    switches behaviour after the file has already been validated, it is
+    not itself a validation check.
+    """
+    return extension.lower() in IMAGE_EXTENSIONS
 
 
 def assert_no_static_upload_route(app) -> None:
