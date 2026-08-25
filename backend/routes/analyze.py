@@ -7,13 +7,14 @@ from pydantic import BaseModel
 from core.config import get_settings
 from core.database import get_db
 from core.dependencies import get_tenant_id
+from core.device_auth import make_actor_dependency
+from core.events import bus
 from repositories.activity import ActivityRepository
 from repositories.alerts import AlertsRepository
 from repositories.fingerprinted_files import FingerprintedFilesRepository
 from routes.auth import get_current_user
-from services import evidence_service
 from services.vision_service import analyze_image
-from services.regex_engine import classify_score, scan, score_detailed
+from services.regex_engine import classify_score, scan, score, score_detailed
 from services.ai_service import classify_file
 from services.file_service import extract_text, sha256, save_fingerprint
 from services.logger_service import log_event
@@ -27,37 +28,45 @@ log = logging.getLogger("securedesk.analyze")
 
 _EVENT_TYPE_BY_ACTION = {"ALLOW": "scan_allowed", "WARN": "scan_warned", "BLOCK": "scan_blocked"}
 
+# Phase 4: the only two routes a device token (Chrome extension) can call.
+# Accepts a normal JWT session too, unchanged — see core/device_auth.py.
+# The web app keeps working exactly as before; a device token additionally
+# unlocks these two, and nothing else.
+scan_actor = make_actor_dependency("dlp:scan")
+
 
 async def _record_scan_evidence(db, org_id: str, user: dict, action: str, payload: dict) -> None:
     """
-    Append a scan decision to the evidence chain. Called synchronously in
-    the request path, after the decision is made and before the response
-    is returned — this is the blocking=True handler the (future) event bus
-    will formalise, but the ordering matters today regardless of whether
-    an event bus exists: a scan decision that was never durably logged is
-    not the product SecureDesk sells (see services/evidence_service.py).
+    Publish a scan decision onto the event bus (core/events.py). Called
+    synchronously in the request path, after the decision is made and
+    before the response is returned. services/event_handlers.py subscribes
+    the evidence chain write as a BLOCKING handler for exactly this event,
+    which is what makes the ordering matter regardless of the bus's
+    existence: a scan decision that was never durably logged is not the
+    product SecureDesk sells (see services/evidence_service.py).
 
     payload must already be PII-safe by the time it reaches here — no raw
     file text, no matched PII substrings, only categories/counts/summaries.
     regex_engine.scan() already returns counts rather than matched values,
     and callers below only add hashes, filenames, and reason strings.
 
-    If EVIDENCE_ENABLED is false, this is a no-op with a warning — lets
-    a deployment that hasn't configured the signing key yet keep scanning.
-    Once enabled, a failure here propagates as a 500 rather than being
-    swallowed: silently letting a scan decision go unlogged would be a
-    silent failure of the exact guarantee the product sells. There is no
-    retry/circuit-breaker around this yet — that's Phase 6 resilience work,
-    not built at the time this was wired in.
+    If EVIDENCE_ENABLED is false, this is a no-op with a warning — lets a
+    deployment that hasn't configured the signing key yet keep scanning.
+    Once enabled, a failure here still propagates (now as either the
+    underlying Mongo error or core.circuit_breaker.CircuitOpenError) rather
+    than being swallowed: silently letting a scan decision go unlogged
+    would be a silent failure of the exact guarantee the product sells.
+    Phase 6 added retry + a circuit breaker around the write itself (see
+    services/event_handlers.py) so a single blip doesn't cost every
+    request a 500 and a sustained outage fails fast instead of timing out
+    per-request — it does NOT make a failed write look like a success.
     """
     settings = get_settings()
     if not settings.EVIDENCE_ENABLED:
         log.warning("evidence chain disabled (EVIDENCE_ENABLED=false) — scan not recorded")
         return
     event_type = _EVENT_TYPE_BY_ACTION.get(action, "scan_warned")
-    await evidence_service.append_entry(
-        db, org_id, user_id=user["_id"], event_type=event_type, payload=payload,
-    )
+    await bus.publish(event_type, db, org_id, user_id=user["_id"], event_type=event_type, payload=payload)
 
 
 class TextScanRequest(BaseModel):
@@ -86,9 +95,16 @@ async def _send_manager_alert(user: dict, filename: str, risk_level: str,
 
 @router.post("/analyze-file")
 async def analyze_text(
-    body: TextScanRequest, user=Depends(get_current_user),
-    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+    body: TextScanRequest, user=Depends(scan_actor),
+    db=Depends(get_db),
 ):
+    # org_id comes from the authenticated actor directly rather than the
+    # separate get_tenant_id dependency: get_tenant_id re-runs
+    # get_current_user internally, which would reject a device token
+    # outright (it isn't a JWT). scan_actor has already resolved org_id
+    # via ensure_personal_org for both credential types — see
+    # core/device_auth.py.
+    org_id = user["org_id"]
     findings                 = scan(body.text, body.filename)
     risk_level, action, reasons = score(findings)
     llm = {}
@@ -111,6 +127,7 @@ async def analyze_text(
         "risk_level": risk_level, "action": action, "reasons": reasons,
         "regex_findings": findings,
         "llm_summary": llm.get("sensitivity_reason") if llm else None,
+        "auth_method": user.get("_auth", {}).get("method", "session"),
     })
 
     return {
@@ -128,10 +145,12 @@ async def analyze_upload(
     file: UploadFile = File(...),
     use_llm: bool    = Form(True),
     watermark: bool  = Form(True),
-    user             = Depends(get_current_user),
-    org_id: str      = Depends(get_tenant_id),
+    user             = Depends(scan_actor),
     db               = Depends(get_db),
 ):
+    # See analyze_text's comment: org_id comes from the actor scan_actor
+    # already resolved, not a second get_tenant_id/get_current_user pass.
+    org_id = user["org_id"]
     # Streams with a hard size ceiling, rejects executables, and requires the
     # sniffed magic bytes to agree with the declared extension. Documents
     # AND images — this is the one upload path with vision_service behind
@@ -203,6 +222,7 @@ async def analyze_upload(
         "vision_confidence": vision["confidence"] if vision else None,
         "vision_unverified": vision["unverified"] if vision else None,
         "is_duplicate": is_dup, "watermarked": watermark,
+        "auth_method": user.get("_auth", {}).get("method", "session"),
     })
 
     # Background email alert for HIGH risk

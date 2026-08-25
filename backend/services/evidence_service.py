@@ -41,6 +41,8 @@ EVENT_TYPES = frozenset({
     "device_heartbeat_lost", "device_enrolled", "device_revoked",
     "evidence_pack_generated", "manual_scan", "override_requested",
     "extension_interception_degraded", "queue_overflow",
+    # Phase 4 — refresh-token rotation reuse detection (services/token_service.py).
+    "auth_refresh_reuse_detected",
 })
 
 # Every entry satisfies both controls: 6(c) because an evidence entry IS

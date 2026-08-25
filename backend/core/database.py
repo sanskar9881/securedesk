@@ -201,6 +201,22 @@ INDEXES: dict[str, list[tuple[list[tuple[str, int]], dict[str, Any]]]] = {
         ([("expires_at", 1)], {"name": "expiry_ttl_idx", "expireAfterSeconds": 0}),
         ([("user_id", 1)], {"name": "user_idx"}),
     ],
+    # Refresh tokens (Phase 4). Looked up by hash (_id) — see
+    # repositories/refresh_tokens.py. TTL cleans up naturally; an expired
+    # refresh token has no audit value once past its own expiry, unlike a
+    # device token, which stays visible so its owner can see enrolment
+    # history.
+    "refresh_tokens": [
+        ([("family_id", 1)], {"name": "family_idx"}),
+        ([("user_id", 1)], {"name": "user_idx"}),
+        ([("expires_at", 1)], {"name": "expiry_ttl_idx", "expireAfterSeconds": 0}),
+    ],
+    # Device tokens (Phase 4). No TTL — a revoked or expired token stays
+    # listed (GET /api/auth/devices) rather than disappearing silently.
+    "device_tokens": [
+        ([("user_id", 1)], {"name": "user_idx"}),
+        ([("org_id", 1)], {"name": "org_idx"}),
+    ],
 }
 
 

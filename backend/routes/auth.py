@@ -1,17 +1,21 @@
 import logging
 import re, uuid, bcrypt
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from core.rate_limit import client_key, login_limiter, register_limiter, refresh_limiter
 from jose import jwt, JWTError
 from pydantic import BaseModel, ConfigDict
 from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 from core.config import get_settings
 from core.database import get_database
 from repositories.organizations import OrganizationsRepository
+from repositories.refresh_tokens import RefreshTokensRepository
 from repositories.reset_tokens import ResetTokensRepository
 from repositories.users import PreTenantAccounts
+from core.tokens import hash_token
+from services import token_service
 from services.email_alert_service import send_password_reset_email
 
 log = logging.getLogger("securedesk.auth")
@@ -66,8 +70,15 @@ def clean_identifier(s: str) -> str:
 
 
 def make_token(user_id: str, role: str) -> str:
+    # "type": "access" is new in Phase 4, additive to the claim set — a
+    # token decoded by any pre-Phase-4 code path (there is none left, but
+    # in principle) still verifies fine since jose ignores unknown claims.
+    # It exists so get_current_user can refuse a token that is shaped like
+    # a JWT but was never meant to authenticate a request as this user —
+    # nothing currently mints such a token, but the check is one line and
+    # costs nothing to have ready.
     exp = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    return jwt.encode({"sub": user_id, "role": role, "exp": exp},
+    return jwt.encode({"sub": user_id, "role": role, "type": "access", "exp": exp},
                       SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -79,6 +90,11 @@ async def get_current_user(
                              algorithms=[ALGORITHM])
         uid = payload.get("sub")
         if not uid:
+            raise HTTPException(401, "Invalid token")
+        if payload.get("type") not in (None, "access"):
+            # None is accepted for backward compatibility with tokens
+            # minted before the "type" claim existed — that's every token
+            # already in a user's browser at the moment this deploys.
             raise HTTPException(401, "Invalid token")
     except JWTError:
         raise HTTPException(401, "Token expired — please login again")
@@ -149,7 +165,12 @@ class LoginBody(BaseModel):
 
 
 @router.post("/register")
-async def register(body: RegisterBody):
+async def register(request: Request, body: RegisterBody):
+    # Phase 6: rate limited before any DB work — an account-flooding
+    # script should be turned away as cheaply as possible, not after a
+    # duplicate-check query has already run.
+    register_limiter.check(client_key(request, body.identifier))
+
     name  = body.name.strip()
     ident = body.identifier.strip()
     pw    = body.password
@@ -213,21 +234,36 @@ async def register(body: RegisterBody):
     }
     await accounts.insert(doc)
     token = make_token(uid, role)
+    # Additive since Phase 4: a client that only reads access_token (every
+    # client shipped before this) is unaffected. A client that adopts
+    # refresh_token gets a revocable, rotating session instead of relying
+    # on the now-short-lived access token alone — see core/config.py's
+    # ACCESS_TOKEN_EXPIRE_MINUTES comment for why that shortened.
+    refresh_token = await token_service.issue_refresh_family(get_database(), uid)
 
     return {
-        "access_token": token,
-        "token_type":   "bearer",
-        "role":         role,
-        "name":         name,
-        "user_id":      uid,
+        "access_token":  token,
+        "refresh_token": refresh_token,
+        "token_type":    "bearer",
+        "expires_in":    ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        "role":          role,
+        "name":          name,
+        "user_id":       uid,
     }
 
 
 @router.post("/login")
-async def login(body: LoginBody):
+async def login(request: Request, body: LoginBody):
     ident = body.identifier.strip()
     if not ident:
         raise HTTPException(400, "Enter your email or phone")
+
+    # Phase 6: keyed on IP + identifier (see core/rate_limit.py) — checked
+    # after the empty-identifier guard so an empty POST doesn't consume a
+    # budget slot for nothing, but before the password check, which is the
+    # expensive (bcrypt) and sensitive part a credential-stuffing script is
+    # actually trying to brute-force.
+    login_limiter.check(client_key(request, ident))
 
     cid = clean_identifier(ident)
     user = await PreTenantAccounts(get_database()).find_by_identifier(cid, ident)
@@ -262,13 +298,16 @@ async def login(body: LoginBody):
         )
 
     token = make_token(user["_id"], stored_role)
+    refresh_token = await token_service.issue_refresh_family(get_database(), user["_id"])
 
     return {
-        "access_token": token,
-        "token_type":   "bearer",
-        "role":         stored_role,
-        "name":         user["name"],
-        "user_id":      user["_id"],
+        "access_token":  token,
+        "refresh_token": refresh_token,
+        "token_type":    "bearer",
+        "expires_in":    ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        "role":          stored_role,
+        "name":          user["name"],
+        "user_id":       user["_id"],
     }
 
 
@@ -350,3 +389,82 @@ async def reset_password(body: dict):
     await PreTenantAccounts(db).set_password_hash(doc["user_id"], ph)
     await tokens_repo.mark_used(tok)
     return {"message": "Password changed successfully"}
+
+
+# ── Phase 4: refresh rotation ─────────────────────────────────────────
+
+class RefreshBody(BaseModel):
+    refresh_token: str
+
+
+@router.post("/refresh")
+async def refresh(request: Request, body: RefreshBody):
+    """
+    Exchange a refresh token for a new (access_token, refresh_token) pair.
+
+    Unauthenticated by design — the refresh token itself IS the
+    credential, the same way a bearer access token is for every other
+    route. Rotation and reuse detection live in services/token_service.py;
+    this endpoint only translates that outcome into HTTP and mints the new
+    access token once rotation succeeds.
+    """
+    db = get_database()
+    raw = body.refresh_token.strip()
+    if not raw:
+        raise HTTPException(400, "refresh_token is required")
+
+    # Phase 6: generous budget (see core/rate_limit.py) — legitimate use
+    # hits this every time an access token expires, so it only needs to
+    # catch a script guessing refresh tokens outright, not slow real
+    # traffic down.
+    refresh_limiter.check(client_key(request, raw[:24]))
+
+    # Resolved before attempting rotation solely so a reuse-detection
+    # evidence entry (if this turns out to be one) is recorded against the
+    # right organisation. This lookup grants no authority on its own —
+    # token_service re-validates everything independently.
+    org_id = None
+    pre = await RefreshTokensRepository(db).find_by_hash(hash_token(raw))
+    if pre:
+        owner = await PreTenantAccounts(db).find_by_id(pre["user_id"])
+        if owner:
+            owner = await ensure_personal_org(owner)
+            org_id = owner.get("org_id")
+
+    try:
+        new_refresh, user_id = await token_service.redeem_refresh_token(db, raw, org_id=org_id)
+    except token_service.RefreshTokenError as e:
+        raise HTTPException(401, str(e))
+
+    user = await PreTenantAccounts(db).find_by_id(user_id)
+    if not user:
+        raise HTTPException(401, "Account no longer exists.")
+    user = await ensure_personal_org(user)
+
+    access = make_token(user_id, user.get("role", "user"))
+    return {
+        "access_token":  access,
+        "refresh_token": new_refresh,
+        "token_type":    "bearer",
+        "expires_in":    ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    }
+
+
+class LogoutBody(BaseModel):
+    refresh_token: str | None = None
+
+
+@router.post("/logout")
+async def logout(body: LogoutBody):
+    """
+    Revoke the presented refresh token's whole rotation family. Always 200
+    — an already-invalid or missing token is a silent no-op rather than an
+    error, matching the oracle-avoidance discipline already used by
+    /forgot-password. The access token itself cannot be revoked (it's a
+    stateless JWT); it simply expires within
+    ACCESS_TOKEN_EXPIRE_MINUTES, which is the whole reason that window is
+    now short.
+    """
+    if body.refresh_token:
+        await token_service.revoke_refresh_token(get_database(), body.refresh_token)
+    return {"message": "Logged out."}

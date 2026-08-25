@@ -125,12 +125,35 @@ class Settings(BaseSettings):
     )
     DATABASE_NAME: str = "cybersec_db"
 
-    # ── Auth ─────────────────────────────────────────────────────────
+    # ── Auth (Phase 4) ───────────────────────────────────────────────
     SECRET_KEY: str = Field(
         validation_alias=AliasChoices("SECRET_KEY", "JWT_SECRET"),
     )
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+    # Deliberately short: was 1440 (24h) before Phase 4, which made the
+    # access token itself the durable credential — an intercepted token
+    # remained valid for a full day with no way to revoke it. Session
+    # length now comes from the refresh token instead (see
+    # REFRESH_TOKEN_EXPIRE_DAYS below), which IS revocable and rotates on
+    # every use. This is a behaviour change, not a contract break: the
+    # response shape is unchanged and additive (routes/auth.py now also
+    # returns refresh_token). A client that does not yet call
+    # POST /api/auth/refresh will simply see its session expire after 15
+    # minutes instead of 24 hours — the frontend needs a refresh-on-401 (or
+    # proactive) interceptor before this should reach production traffic.
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    # Refresh tokens rotate on every use (see services/token_service.py).
+    # Each rotation slides the expiry forward by this many days, capped in
+    # absolute terms by REFRESH_TOKEN_ABSOLUTE_MAX_DAYS regardless of how
+    # often it's used — an indefinitely-renewable credential is not
+    # meaningfully different from a permanent one.
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    REFRESH_TOKEN_ABSOLUTE_MAX_DAYS: int = 90
+    # Device tokens (Chrome extension). Longer-lived than a refresh token
+    # because there's no human present to re-authenticate an unattended
+    # extension install — revocation (GET/DELETE /api/auth/devices) is the
+    # control instead of a short expiry.
+    DEVICE_TOKEN_EXPIRE_DAYS: int = 180
 
     # ── Evidence chain (Phase 3) ─────────────────────────────────────
     # Optional until the evidence chain is built. EVIDENCE_ENABLED is the

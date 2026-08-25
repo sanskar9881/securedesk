@@ -36,6 +36,12 @@ _DB_ERRORS = (
     "ServerSelectionTimeoutError", "AutoReconnect", "NetworkTimeout",
     "OperationFailure", "ConnectionFailure", "PyMongoError",
     "DuplicateKeyError", "WriteError", "ConfigurationError",
+    # Phase 6: the evidence-write circuit breaker (core/circuit_breaker.py)
+    # only ever opens because of a run of PyMongoError failures today, so
+    # the same "we couldn't reach the data store" message is accurate —
+    # not a generic 500, and nothing about *why* the breaker is open (host,
+    # credentials) ever reaches the client either way.
+    "CircuitOpenError",
 )
 
 
@@ -43,16 +49,27 @@ def _error_id() -> str:
     return uuid.uuid4().hex[:12]
 
 
+def _request_id(request: Request) -> str | None:
+    # Set by main.py's request_id_middleware (Phase 7) on every request.
+    # Optional lookup: a handler invoked outside that middleware (there
+    # isn't one today) simply omits request_id rather than failing.
+    return getattr(request.state, "request_id", None)
+
+
 def _context(request: Request) -> dict:
     return {
         "method": request.method,
         "path": request.url.path,
         "client": request.client.host if request.client else None,
+        "request_id": _request_id(request),
     }
 
 
-def _body(eid: str, message: str) -> dict:
-    return {"detail": message, "error_id": eid}
+def _body(eid: str, message: str, request_id: str | None = None) -> dict:
+    body = {"detail": message, "error_id": eid}
+    if request_id:
+        body["request_id"] = request_id
+    return body
 
 
 def install_error_handlers(app: FastAPI) -> None:
@@ -66,7 +83,7 @@ def install_error_handlers(app: FastAPI) -> None:
                 "unhandled_http_5xx id=%s status=%s detail=%r ctx=%s",
                 eid, exc.status_code, exc.detail, _context(request),
             )
-            return JSONResponse(status_code=exc.status_code, content=_body(eid, GENERIC_500))
+            return JSONResponse(status_code=exc.status_code, content=_body(eid, GENERIC_500, _request_id(request)))
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.detail},
@@ -99,7 +116,7 @@ def install_error_handlers(app: FastAPI) -> None:
         message = GENERIC_DB if is_db else GENERIC_500
         if EXPOSE_ERRORS:
             message = f"{message} [dev: {name}: {exc}]"
-        return JSONResponse(status_code=500, content=_body(eid, message))
+        return JSONResponse(status_code=500, content=_body(eid, message, _request_id(request)))
 
 
 def safe_502(eid_log_msg: str, exc: Exception) -> HTTPException:

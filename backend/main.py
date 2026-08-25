@@ -1,14 +1,16 @@
 import logging
+import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from core.config import get_settings
-from core.database import connect, disconnect
+from core.database import connect, disconnect, get_database
 from core.errors import install_error_handlers
 from core.uploads import assert_no_static_upload_route
 from repositories.evidence import assert_append_only as assert_evidence_append_only
-from routes import auth, files, admin, profile, phishing, chatbot
+from routes import auth, device_tokens, files, admin, profile, phishing, chatbot
 
 logging.basicConfig(
     level=get_settings().LOG_LEVEL,
@@ -45,6 +47,14 @@ async def lifespan(app: FastAPI):
 
     await connect()
 
+    # Phase 5: subscribe the evidence chain write (Phase 6 circuit-breaker
+    # protected) onto the event bus, once per process. Must run after
+    # connect() only because it imports services.evidence_service, which
+    # is fine at any point before the first request — kept here so
+    # startup order stays a single readable sequence.
+    from services.event_handlers import register_handlers
+    register_handlers()
+
     try:
         from ml.classifier import _get_model
         _get_model()
@@ -74,6 +84,25 @@ install_error_handlers(app)
 
 
 @app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    """
+    Phase 7 observability: every request gets a correlation id, generated
+    unless the caller (or a fronting proxy) already supplied one. Stashed
+    on request.state so core/errors.py can fold it into both the 5xx log
+    line and the JSON body alongside the existing error_id — a support
+    request that quotes the response body's request_id can be matched
+    directly to a server log line, no timestamp/path guessing required.
+    Echoed back on every response, not just errors, so a client can log it
+    up front and have it ready if a later request in the same flow fails.
+    """
+    rid = request.headers.get("X-Request-ID") or uuid.uuid4().hex[:16]
+    request.state.request_id = rid
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = rid
+    return response
+
+
+@app.middleware("http")
 async def security_headers(request: Request, call_next):
     """Baseline hardening headers. The API returns JSON only, so a strict
     CSP and nosniff cost nothing and close off content-sniffing tricks."""
@@ -100,6 +129,7 @@ app.add_middleware(
 
 # Core — always on (auth never breaks)
 app.include_router(auth.router,     prefix="/api/auth",     tags=["Auth"])
+app.include_router(device_tokens.router, prefix="/api/auth/devices", tags=["Auth"])
 app.include_router(files.router,    prefix="/api/files",    tags=["Files"])
 app.include_router(admin.router,    prefix="/api/admin",    tags=["Admin"])
 app.include_router(profile.router,  prefix="/api/profile",  tags=["Profile"])
@@ -134,3 +164,24 @@ for name, module_path, prefix in optional_routes:
 @app.get("/")
 async def root():
     return {"status": "SecureDesk API v4.0", "docs": "/docs"}
+
+
+@app.get("/healthz")
+async def healthz():
+    """
+    Phase 7 observability: liveness/readiness for Render's health check
+    (and anything else that wants one). Pings Mongo rather than just
+    returning 200 unconditionally — a process that's up but can't reach
+    its database is not healthy, and a load balancer / deploy tool should
+    be told that rather than kept routing traffic to it.
+    """
+    try:
+        await get_database().command("ping")
+        db_ok = True
+    except Exception:
+        log.exception("healthz: database ping failed")
+        db_ok = False
+    return JSONResponse(
+        status_code=200 if db_ok else 503,
+        content={"status": "ok" if db_ok else "degraded", "database": db_ok},
+    )
