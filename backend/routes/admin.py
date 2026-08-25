@@ -121,6 +121,51 @@ async def get_users(
     return results
 
 
+@router.get("/devices")
+async def list_devices(
+    actor=Depends(require_admin),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
+    """
+    Every device token enrolled anywhere in the organisation — the
+    "X of Y employees protected" coverage view. Admin-only, unlike
+    /api/auth/devices (self-service, one employee's own devices only —
+    see routes/device_tokens.py). The raw token is never returned by
+    either surface; this one doesn't even return the hash's full form,
+    same truncation as the evidence payloads that reference a device_id.
+    """
+    from services import token_service
+
+    docs = await token_service.list_org_device_tokens(db, org_id)
+    return [
+        {
+            "device_id": d["_id"],
+            "user_id": d["user_id"],
+            "name": d.get("name", ""),
+            "scopes": d.get("scopes", []),
+            "created_at": d["created_at"].isoformat() if hasattr(d.get("created_at"), "isoformat") else d.get("created_at"),
+            "last_used_at": d["last_used_at"].isoformat() if hasattr(d.get("last_used_at"), "isoformat") else d.get("last_used_at"),
+            "expires_at": d["expires_at"].isoformat() if hasattr(d.get("expires_at"), "isoformat") else d.get("expires_at"),
+            "revoked": d.get("revoked_at") is not None,
+        }
+        for d in docs
+    ]
+
+
+@router.delete("/devices/{device_id}")
+async def revoke_device(
+    device_id: str,
+    actor=Depends(require_admin),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
+    from services import token_service
+
+    ok = await token_service.admin_revoke_device_token(db, org_id=org_id, device_id=device_id)
+    if not ok:
+        raise HTTPException(404, "That device doesn't exist or was already revoked.")
+    return {"revoked": True, "device_id": device_id}
+
+
 class RoleChange(BaseModel):
     role: str
 

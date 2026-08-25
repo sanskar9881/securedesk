@@ -252,3 +252,45 @@ async def revoke_device_token(db, *, user_id: str, org_id: str, device_id: str) 
         except Exception:
             log.exception("failed to record device_revoked evidence entry")
     return ok
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Admin-facing device fleet view (routes/admin.py)
+# ─────────────────────────────────────────────────────────────────────
+#
+# Everything above this point is self-service: a user sees and revokes
+# only their own device tokens (the popup's own model). An admin needs the
+# organisation-wide view — "how many employees are actually protected" is
+# unanswerable from the self-service surface alone, since it only ever
+# shows the caller's own one device. These two functions are that view.
+
+async def list_org_device_tokens(db, org_id: str) -> list[dict]:
+    return [d async for d in DeviceTokensRepository(db).list_for_org(org_id)]
+
+
+async def admin_revoke_device_token(db, *, org_id: str, device_id: str) -> bool:
+    """
+    Revoke ANY employee's device in the admin's own organisation — unlike
+    revoke_device_token above, not restricted to the caller's own device.
+    The evidence entry is attributed to the device's actual owner (not the
+    admin), since that's whose enrollment status just changed; the admin's
+    identity isn't threaded through here at all, matching how the rest of
+    this module already keeps "who acted" implicit in the caller's own
+    org-scoped repository access rather than stamping it into the payload.
+    """
+    repo = DeviceTokensRepository(db)
+    doc = await repo.find_by_id_for_org(device_id, org_id)
+    if doc is None or doc.get("revoked_at") is not None:
+        return False
+
+    now = datetime.now(timezone.utc)
+    ok = await repo.revoke_for_org(device_id, org_id, now)
+    if ok and get_settings().EVIDENCE_ENABLED:
+        try:
+            await evidence_service.append_entry(
+                db, org_id, user_id=doc["user_id"], event_type="device_revoked",
+                payload={"device_id": device_id[:16], "revoked_by": "admin"},
+            )
+        except Exception:
+            log.exception("failed to record device_revoked evidence entry")
+    return ok
