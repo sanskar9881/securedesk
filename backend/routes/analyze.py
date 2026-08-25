@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
@@ -10,6 +11,7 @@ from repositories.activity import ActivityRepository
 from repositories.alerts import AlertsRepository
 from repositories.fingerprinted_files import FingerprintedFilesRepository
 from routes.auth import get_current_user
+from services import evidence_service
 from services.regex_engine import scan, score
 from services.ai_service import classify_file
 from services.file_service import extract_text, sha256, save_fingerprint
@@ -20,6 +22,41 @@ from services.email_alert_service import send_alert_email
 from core.uploads import read_validated_upload
 
 router = APIRouter()
+log = logging.getLogger("securedesk.analyze")
+
+_EVENT_TYPE_BY_ACTION = {"ALLOW": "scan_allowed", "WARN": "scan_warned", "BLOCK": "scan_blocked"}
+
+
+async def _record_scan_evidence(db, org_id: str, user: dict, action: str, payload: dict) -> None:
+    """
+    Append a scan decision to the evidence chain. Called synchronously in
+    the request path, after the decision is made and before the response
+    is returned — this is the blocking=True handler the (future) event bus
+    will formalise, but the ordering matters today regardless of whether
+    an event bus exists: a scan decision that was never durably logged is
+    not the product SecureDesk sells (see services/evidence_service.py).
+
+    payload must already be PII-safe by the time it reaches here — no raw
+    file text, no matched PII substrings, only categories/counts/summaries.
+    regex_engine.scan() already returns counts rather than matched values,
+    and callers below only add hashes, filenames, and reason strings.
+
+    If EVIDENCE_ENABLED is false, this is a no-op with a warning — lets
+    a deployment that hasn't configured the signing key yet keep scanning.
+    Once enabled, a failure here propagates as a 500 rather than being
+    swallowed: silently letting a scan decision go unlogged would be a
+    silent failure of the exact guarantee the product sells. There is no
+    retry/circuit-breaker around this yet — that's Phase 6 resilience work,
+    not built at the time this was wired in.
+    """
+    settings = get_settings()
+    if not settings.EVIDENCE_ENABLED:
+        log.warning("evidence chain disabled (EVIDENCE_ENABLED=false) — scan not recorded")
+        return
+    event_type = _EVENT_TYPE_BY_ACTION.get(action, "scan_warned")
+    await evidence_service.append_entry(
+        db, org_id, user_id=user["_id"], event_type=event_type, payload=payload,
+    )
 
 
 class TextScanRequest(BaseModel):
@@ -65,6 +102,16 @@ async def analyze_text(
                     filename=body.filename, risk_level=risk_level,
                     action_taken=action, reasons=reasons,
                     extra={"anomalies": anomalies})
+
+    # Blocking: lands before the response returns. No raw text — findings
+    # already carry counts rather than matched values (see regex_engine.py).
+    await _record_scan_evidence(db, org_id, user, action, payload={
+        "filename": body.filename, "source": "text_scan",
+        "risk_level": risk_level, "action": action, "reasons": reasons,
+        "regex_findings": findings,
+        "llm_summary": llm.get("sensitivity_reason") if llm else None,
+    })
+
     return {
         "risk_level": risk_level, "recommended_action": action,
         "reasons": reasons or ["No sensitive data detected"],
@@ -118,6 +165,18 @@ async def analyze_upload(
                     filename=filename, file_hash=h,
                     risk_level=risk_level, action_taken=action, reasons=reasons,
                     extra={"anomalies": anomalies, "watermarked": watermark})
+
+    # Blocking: lands before the response returns. file_hash identifies the
+    # content without storing it; regex_findings carry counts, never the
+    # matched PII values themselves.
+    await _record_scan_evidence(db, org_id, user, action, payload={
+        "filename": filename, "source": "file_upload",
+        "file_hash": h, "file_size": len(content),
+        "risk_level": risk_level, "action": action, "reasons": reasons,
+        "regex_findings": findings,
+        "llm_summary": llm.get("sensitivity_reason") if llm else None,
+        "is_duplicate": is_dup, "watermarked": watermark,
+    })
 
     # Background email alert for HIGH risk
     if risk_level == "HIGH":

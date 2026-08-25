@@ -7,6 +7,7 @@ from core.config import get_settings
 from core.database import connect, disconnect
 from core.errors import install_error_handlers
 from core.uploads import assert_no_static_upload_route
+from repositories.evidence import assert_append_only as assert_evidence_append_only
 from routes import auth, files, admin, profile, phishing, chatbot
 
 logging.basicConfig(
@@ -36,6 +37,11 @@ async def lifespan(app: FastAPI):
     # Fails loudly if anyone ever mounts StaticFiles: uploaded content must
     # never become a fetchable URL.
     assert_no_static_upload_route(app)
+
+    # Fails loudly if evidence_log or evidence_checkpoints ever grows an
+    # update/delete method — the chain's entire value depends on nothing
+    # being able to edit history. See repositories/evidence.py.
+    assert_evidence_append_only()
 
     await connect()
 
@@ -117,6 +123,7 @@ optional_routes = [
     #   together with real keys AND after making that check fail closed.
     ("Exports",       "routes.exports",       "/api/export"),
     ("Notifications", "routes.notifications", "/api/notifications"),
+    ("Evidence",      "routes.evidence",       "/api/evidence"),
 ]
 
 for name, module_path, prefix in optional_routes:

@@ -177,6 +177,23 @@ INDEXES: dict[str, list[tuple[list[tuple[str, int]], dict[str, Any]]]] = {
     "subscriptions": [
         ([("user_id", 1)], {"name": "user_idx"}),
     ],
+    # Evidence chain (Phase 3). evidence_log has no update/delete path in
+    # code (see repositories/evidence.py) — org_seq_unique_idx additionally
+    # makes a duplicate seq within one org's chain a database-level
+    # impossibility, not just an application-level one.
+    "evidence_log": [
+        ([("org_id", 1), ("seq", 1)], {"name": "org_seq_unique_idx", "unique": True}),
+        ([("org_id", 1), ("user_id", 1), ("timestamp", -1)], {"name": "org_user_time_idx"}),
+        ([("org_id", 1), ("event_type", 1)], {"name": "org_event_type_idx"}),
+        ([("retain_until", 1)], {"name": "retain_until_idx"}),
+    ],
+    "evidence_chain_heads": [
+        # _id is already org_id (one head document per org) — no extra
+        # index needed beyond the implicit _id index.
+    ],
+    "evidence_checkpoints": [
+        ([("org_id", 1), ("seq", 1)], {"name": "org_seq_idx"}),
+    ],
     # TTL: expired reset tokens delete themselves. They are bearer
     # credentials for an account, so they should not outlive their window
     # sitting in the collection.

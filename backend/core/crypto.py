@@ -30,6 +30,21 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,
 GENESIS_HASH = "0" * 64
 
 
+def now_millis() -> datetime:
+    """UTC now, truncated to millisecond precision.
+
+    MongoDB's BSON datetime type only has millisecond resolution — anything
+    written with microsecond precision comes back truncated on read. A hash
+    or signature computed on the microsecond-precision value before the
+    write would never match one recomputed from the value read back
+    afterward, so every evidence timestamp is generated at millisecond
+    precision from the start rather than truncated only on the way out.
+    """
+    from datetime import timezone
+    dt = datetime.now(timezone.utc)
+    return dt.replace(microsecond=(dt.microsecond // 1000) * 1000)
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Canonical JSON + hashing
 # ─────────────────────────────────────────────────────────────────────
