@@ -5,7 +5,7 @@ import api from "../api/axios";
 import { apiErrorMessage } from "../api/errors";
 import { useAuth } from "../context/AuthContext";
 import AuthShell, { AsideProof } from "../components/AuthShell";
-import RoleChoice, { type Role, toRole } from "../components/RoleChoice";
+import { toRole } from "../components/RoleChoice";
 
 /** Password strength, judged honestly — length first, variety second. */
 function strengthOf(pw: string): { score: 0 | 1 | 2 | 3; label: string } {
@@ -27,10 +27,6 @@ export default function RegisterPage() {
   const [name, setName] = useState("");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-  // The role the new account is created with. Unlike the sign-in selector,
-  // this one is authoritative — the server validates it against the same
-  // three roles and stores what's chosen.
-  const [role, setRole] = useState<Role>("user");
   const [reveal, setReveal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -54,12 +50,15 @@ export default function RegisterPage() {
         name: name.trim(),
         identifier: id,
         password,
-        role,
       });
 
-      // Trust the role the server echoes back, not the one picked here — if
-      // the server ever declines to honour the request, the UI must follow
-      // the account that was actually created.
+      // Public registration always creates a plain employee account — the
+      // server enforces this regardless of what a request sends (see
+      // routes/auth.py: RegisterBody.role is accepted-and-ignored, kept
+      // only so an older client that still sends one doesn't 422).
+      // Elevation is a separate, authenticated, admin-only action
+      // (PATCH /api/admin/users/{id}/role). toRole still guards against a
+      // malformed/unexpected value in the response rather than assuming.
       const granted = toRole(data.role);
       login(data.access_token, granted, data.name, data.user_id || "");
       navigate(granted === "admin" || granted === "manager" ? "/admin" : "/dashboard");
@@ -106,15 +105,6 @@ export default function RegisterPage() {
       )}
 
       <form onSubmit={submit} className="space-y-4">
-        <RoleChoice
-          legend="Create account as"
-          value={role}
-          onChange={(r) => {
-            setRole(r);
-            setError("");
-          }}
-        />
-
         <div>
           <label htmlFor="name" className="field-label">
             Full name

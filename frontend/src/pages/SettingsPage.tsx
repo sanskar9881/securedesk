@@ -61,6 +61,19 @@ export default function SettingsPage() {
       ]
     },
     {
+      title: "Chrome Extension",
+      items: [
+        {
+          icon: <Monitor className="w-4 h-4" />,
+          label: "My device token",
+          sub: "Enrol the WhatsApp Web extension on this device",
+          action: () => navigate("/settings/devices"),
+          color: "blue",
+          hasArrow: true,
+        },
+      ],
+    },
+    {
       title: "Privacy & Legal",
       items: [
         { icon: <ShieldCheck className="w-4 h-4" />, label: t("privacy_center"), sub: "Data privacy & FAQ", action: () => navigate("/settings/privacy"), color: "green", hasArrow: true },

@@ -4,8 +4,8 @@ import { useAuth } from "../context/AuthContext";
 import { useSidebar } from "../context/SidebarContext";
 import Mark from "./Mark";
 import {
-  LayoutDashboard, Send, LogOut, Users, History, ShieldAlert,
-  MessageSquare, ScanLine, Brain, Activity, Database, FileCheck,
+  LayoutDashboard, Send, LogOut, Users, History,
+  ScanLine, Activity, FileCheck, ShieldCheck, Laptop2,
   TrendingUp, Building2, MessageCircle, Menu, X, Settings,
   PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
@@ -61,31 +61,25 @@ export default function Navbar() {
           title: "Inspect",
           items: [
             { to: "/dlp", icon: <ScanLine className={ic} />, label: "Content scanner" },
-            { to: "/fingerprints", icon: <Database className={ic} />, label: "Fingerprints" },
             { to: "/whatsapp-logs", icon: <MessageCircle className={ic} />, label: "WA DLP" },
-            { to: "/phishing", icon: <ShieldAlert className={ic} />, label: "Phishing checks" },
+            { to: "/admin/evidence", icon: <ShieldCheck className={ic} />, label: "Evidence" },
           ],
         },
         {
           title: "Govern",
           items: [
-            // People management and org settings can grant privilege or
-            // reconfigure the tenant, so they are administrator-only. The
-            // routes enforce this too — hiding the link is not the control.
+            // People management, org settings, and device enrollment can
+            // grant privilege or reconfigure the tenant, so they are
+            // administrator-only. The routes enforce this too — hiding the
+            // link is not the control.
             ...(isAdmin
               ? [
                   { to: "/admin/users", icon: <Users className={ic} />, label: "People" },
+                  { to: "/admin/devices", icon: <Laptop2 className={ic} />, label: "Devices" },
                   { to: "/organization", icon: <Building2 className={ic} />, label: "Organisation" },
                 ]
               : []),
             { to: "/compliance", icon: <FileCheck className={ic} />, label: "Compliance" },
-          ],
-        },
-        {
-          title: "SDAI Bot",
-          items: [
-            { to: "/ai-copilot", icon: <Brain className={ic} />, label: "SD Copilot" },
-            { to: "/chat", icon: <MessageSquare className={ic} />, label: "SecureDesk AI" },
           ],
         },
       ]
@@ -102,15 +96,7 @@ export default function Navbar() {
           title: "Tools",
           items: [
             { to: "/dlp", icon: <ScanLine className={ic} />, label: "Content scanner" },
-            { to: "/phishing", icon: <ShieldAlert className={ic} />, label: "Phishing check" },
             { to: "/activity", icon: <Activity className={ic} />, label: "My activity" },
-          ],
-        },
-        {
-          title: "SDAI Bot",
-          items: [
-            { to: "/ai-copilot", icon: <Brain className={ic} />, label: "SD Copilot" },
-            { to: "/chat", icon: <MessageSquare className={ic} />, label: "SecureDesk AI" },
           ],
         },
       ];

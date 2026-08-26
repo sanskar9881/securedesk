@@ -29,6 +29,10 @@ import UEBAPage             from "./pages/UEBAPage";
 import OrganizationPage     from "./pages/OrganizationPage";
 import WhatsAppLogsPage     from "./pages/WhatsAppLogsPage";
 import PricingPage          from "./pages/PricingPage";
+import DevicesPage          from "./pages/DevicesPage";
+import MyDevicesPage        from "./pages/MyDevicesPage";
+import EvidencePage         from "./pages/EvidencePage";
+import ExtensionPage        from "./pages/ExtensionPage";
 
 export default function App() {
   return (
@@ -46,6 +50,7 @@ export default function App() {
           <Route path="/register"      element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/pricing"       element={<PricingPage />} />
+          <Route path="/extension"     element={<ExtensionPage />} />
           <Route path="/onboarding"    element={<ProtectedRoute><OnboardingPage /></ProtectedRoute>} />
 
           {/* User */}
@@ -54,14 +59,17 @@ export default function App() {
           <Route path="/history"    element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
 
           {/* Admin */}
-          <Route path="/admin"       element={<ProtectedRoute allow={["admin", "manager"]}><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/admin/users" element={<ProtectedRoute allow={["admin"]}><AdminUsersPage /></ProtectedRoute>} />
+          <Route path="/admin"          element={<ProtectedRoute allow={["admin", "manager"]}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/users"    element={<ProtectedRoute allow={["admin"]}><AdminUsersPage /></ProtectedRoute>} />
+          <Route path="/admin/devices"  element={<ProtectedRoute allow={["admin"]}><DevicesPage /></ProtectedRoute>} />
+          <Route path="/admin/evidence" element={<ProtectedRoute allow={["admin", "manager"]}><EvidencePage /></ProtectedRoute>} />
 
           {/* Shared */}
           <Route path="/profile"           element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="/settings"          element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
           <Route path="/settings/language" element={<ProtectedRoute><LanguagePage /></ProtectedRoute>} />
           <Route path="/settings/privacy"  element={<ProtectedRoute><PrivacyPage /></ProtectedRoute>} />
+          <Route path="/settings/devices"  element={<ProtectedRoute><MyDevicesPage /></ProtectedRoute>} />
           <Route path="/phishing"          element={<ProtectedRoute><PhishingPage /></ProtectedRoute>} />
           <Route path="/chat"              element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
 
