@@ -7,16 +7,17 @@ import useMarketingSurface from "../hooks/useMarketingSurface";
 
 /* ═══════════════════════════════════════════════════════════════
    Live interception panel — the product's core moment, shown.
-   An employee pastes customer records into ChatGPT. SecureDesk
-   classifies it on-device, matches policy, and blocks it.
+   An employee attaches a photographed Aadhaar card on WhatsApp Web.
+   SecureDesk intercepts it before WhatsApp receives it, scans it
+   with the vision model, and blocks it.
    ═══════════════════════════════════════════════════════════════ */
 
 const TRACE = [
-  { t: "00.000", label: "paste detected", detail: "2,318 chars → chatgpt.com" },
-  { t: "00.004", label: "destination resolved", detail: "ChatGPT · AI_TOOL · untrusted" },
-  { t: "00.011", label: "content classified", detail: "CUSTOMER_PII · confidence 0.94" },
-  { t: "00.013", label: "policy matched", detail: "AI-PROTECTION-001" },
-  { t: "00.014", label: "action enforced", detail: "BLOCKED — nothing left the browser" },
+  { t: "00.000", label: "file intercepted", detail: "aadhaar_photo.jpg → web.whatsapp.com" },
+  { t: "00.410", label: "vision scan", detail: "AADHAAR_CARD · confidence 0.94" },
+  { t: "01.180", label: "risk scored", detail: "HIGH · government ID, escalation-only" },
+  { t: "01.190", label: "policy matched", detail: "government ID documents — BLOCK" },
+  { t: "01.200", label: "action enforced", detail: "BLOCKED — never reached WhatsApp's send queue" },
 ];
 
 function InterceptPanel() {
@@ -45,7 +46,7 @@ function InterceptPanel() {
     <div
       className="rounded-xl border border-[#343B50] bg-[#0A0C12] shadow-[0_32px_80px_-28px_rgba(5,7,10,.7)] overflow-hidden"
       role="img"
-      aria-label="Demonstration: a paste of customer records into ChatGPT is classified as CUSTOMER_PII with 0.94 confidence, matched against policy AI-PROTECTION-001, and blocked in 14 milliseconds."
+      aria-label="Demonstration: a file attached on WhatsApp Web is identified as an Aadhaar card by SecureDesk's vision scan with 0.94 confidence, scored HIGH risk, matched against a BLOCK policy for government ID documents, and blocked before it reached WhatsApp's send queue."
     >
       {/* chrome */}
       <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-[#343B50] bg-[#05060A]">
@@ -116,14 +117,14 @@ function InterceptPanel() {
             <Mark size={15} tone={done ? "#FF8078" : "#7E8798"} />
             <div className="min-w-0">
               <p className="text-[13px] font-medium text-[#EEF1F7] leading-snug">
-                SecureDesk blocked this paste
+                SecureDesk blocked this file
               </p>
               <p className="text-[12px] text-[#99A1B3] mt-1 leading-relaxed">
-                It looks like customer personal information. Your organisation's
-                policy doesn't allow that in external AI tools.
+                It looks like a photo of an Aadhaar card. Government-issued ID
+                photos aren't allowed to leave through WhatsApp Web.
               </p>
               <p className="mono text-[10px] tracking-[0.08em] uppercase text-[#7E8798] mt-2">
-                policy AI-PROTECTION-001 · contact security to request an exception
+                logged to the evidence chain · request an override from the extension
               </p>
             </div>
           </div>
@@ -135,28 +136,26 @@ function InterceptPanel() {
 
 /* ═══════════════════════════════════════════════════════════════ */
 
-const DESTINATIONS = [
-  { group: "AI tools",       items: ["ChatGPT", "Claude", "Gemini", "Perplexity", "Copilot"] },
-  { group: "Personal mail",  items: ["Gmail", "Outlook", "Proton", "Yahoo"] },
-  { group: "Cloud storage",  items: ["Google Drive", "Dropbox", "OneDrive", "Box"] },
-  { group: "Developer",      items: ["GitHub", "GitLab", "Stack Overflow", "Pastebin"] },
-  { group: "Messaging",      items: ["Slack", "Teams", "Discord", "Telegram Web"] },
-  { group: "Anything else",  items: ["Unclassified domains fall back to your default policy"] },
+const DOCUMENT_TYPES = [
+  { group: "Government ID",     items: ["Aadhaar card", "PAN card", "Passport", "Voter ID", "Driving licence"] },
+  { group: "Financial",         items: ["Bank cheque", "Bank statement", "Credit / debit card", "Salary slip", "ITR form"] },
+  { group: "Sensitive records", items: ["Medical report", "Signed contract", "Screenshot with credentials"] },
+  { group: "In plain text",     items: ["PAN and Aadhaar number patterns", "Card and bank account numbers", "Bulk phone numbers and email lists"] },
 ];
 
 const PIPELINE = [
-  { n: "01", h: "Detect the action",   p: "The extension watches for paste, form submission, and file upload — the moments data actually moves. It does not log keystrokes or browsing history." },
-  { n: "02", h: "Inspect on-device",   p: "Only the content involved in that action is read, and only when a policy requires it. Classification runs locally in the browser." },
-  { n: "03", h: "Resolve destination", p: "The active origin is matched against a destination registry your admins control — trusted, untrusted, or unknown." },
-  { n: "04", h: "Evaluate policy",     p: "Your rules run in priority order against the classification, destination, and user. First match decides." },
-  { n: "05", h: "Enforce and explain", p: "Allow, warn, or block — with a plain-language reason for the employee and a metadata-only event for your security team." },
+  { n: "01", h: "Intercept before it sends", p: "A capture-phase listener on WhatsApp Web catches every file attachment, drag-and-drop, and paste before WhatsApp's own code ever receives it — not a warning shown after the fact." },
+  { n: "02", h: "Inspect — text and images",  p: "Regex patterns catch PAN, Aadhaar, and card numbers in documents; an AI vision model inspects photographed ID cards, bank cheques, and screenshots the way a person would look at them." },
+  { n: "03", h: "Score, escalation-only",     p: "Every signal can only raise the risk score, never lower one another signal already raised — a photographed Aadhaar card can't be waved through because the surrounding text looked clean." },
+  { n: "04", h: "Decide — allow, warn, or block", p: "The verdict comes back before the file reaches WhatsApp's send queue. A BLOCK is enforced there, not just flagged afterwards." },
+  { n: "05", h: "Log to the evidence chain",  p: "Every decision is hash-linked to the one before it and signed — the audit record DPDP Rule 6 requires, built automatically, not bolted on later." },
 ];
 
 const NEVER = [
-  "Keystrokes or anything typed outside an inspected action",
-  "Browsing history or the pages an employee visits",
-  "The raw sensitive content itself — only its classification",
-  "Personal accounts, personal devices, or off-hours activity",
+  "Keystrokes, typed messages, or WhatsApp chat text itself",
+  "Any website or tab other than web.whatsapp.com",
+  "A stored copy of the file — analysed in memory, never written to disk",
+  "The matched PAN, Aadhaar, or card digits — only that a match occurred",
 ];
 
 export default function LandingPage() {
@@ -203,19 +202,21 @@ export default function LandingPage() {
             <div>
               <div className="inline-flex items-center gap-2 mb-7">
                 <span className="w-1.5 h-1.5 rounded-full bg-signal animate-pulse-dot" />
-                <span className="eyebrow">AI-era data loss prevention</span>
+                <span className="eyebrow">WhatsApp Web data loss prevention</span>
               </div>
 
-              <h1 className="text-display-xl text-slate-950 max-w-[13ch]">
-                Your data doesn't leak.
-                <span className="block text-signal-ink">It gets pasted.</span>
+              <h1 className="text-display-xl text-slate-950 max-w-[15ch]">
+                Sensitive files don't leak.
+                <span className="block text-signal-ink">They go out on WhatsApp.</span>
               </h1>
 
               <p className="mt-7 text-[17px] leading-relaxed text-slate-600 max-w-[52ch]">
-                Employees move customer records, source code, and credentials into
-                ChatGPT, personal Gmail, and Dropbox dozens of times a day — usually
-                trying to do their job faster. SecureDesk sees it at the moment it
-                happens, applies your policy, and stops what shouldn't leave.
+                Employees photograph Aadhaar cards, PAN cards, and bank statements and
+                send them over WhatsApp Web dozens of times a day — to vendors,
+                candidates, and each other, usually without thinking twice. SecureDesk
+                intercepts the file before WhatsApp ever receives it, scans it —
+                including the photo itself — and blocks what your policy says
+                shouldn't go out.
               </p>
 
               <div className="mt-9 flex flex-wrap items-center gap-3">
@@ -246,7 +247,7 @@ export default function LandingPage() {
               />
               <InterceptPanel />
               <p className="mt-3 mono text-[10.5px] tracking-[0.07em] uppercase text-slate-500 text-center">
-                Illustrative trace — detection and policy run on-device
+                Illustrative trace — the file is held until SecureDesk returns a verdict
               </p>
             </div>
           </div>
@@ -260,14 +261,14 @@ export default function LandingPage() {
             <div>
               <p className="eyebrow mb-4">The gap</p>
               <h2 className="text-display-md text-slate-950">
-                Your existing controls were built for files, not for a text box.
+                Your existing controls don't watch WhatsApp Web at all.
               </h2>
             </div>
             <div className="grid sm:grid-cols-3 gap-px bg-paper-line border border-paper-line rounded-lg overflow-hidden">
               {[
-                { h: "Email DLP", p: "Scans attachments and message bodies. A paste into a browser tab never touches your mail server." },
-                { h: "CASB / proxy", p: "Sees the domain and the request. It can't tell an approved prompt from a customer database dump." },
-                { h: "Endpoint DLP", p: "Watches files on disk. Text copied from a web app to a web app leaves no file behind." },
+                { h: "Email DLP", p: "Scans attachments and message bodies on your mail server. A file shared through a browser tab never touches it." },
+                { h: "CASB / proxy", p: "Sees that an employee opened web.whatsapp.com. It can't see what's inside the file being attached, let alone whether it's a photographed ID card." },
+                { h: "Endpoint DLP", p: "Watches files written to disk. A photo shared straight from WhatsApp Web's file picker often never touches the laptop's disk at all." },
               ].map((c) => (
                 <div key={c.h} className="bg-paper-raised p-6">
                   <h3 className="text-[14px] font-semibold text-slate-900 mb-2">{c.h}</h3>
@@ -285,11 +286,12 @@ export default function LandingPage() {
           <div className="max-w-narrow mb-14">
             <p className="eyebrow mb-4">How it works</p>
             <h2 className="text-display-md text-slate-950">
-              Five stages, all of them on the employee's machine.
+              Five stages, from attachment to verdict.
             </h2>
             <p className="mt-5 text-[16px] leading-relaxed text-slate-600 max-w-measure">
-              The decision never waits on a network round-trip — that's what keeps it
-              invisible in normal use. Your backend receives the outcome, not the content.
+              The file is held for the few seconds a scan takes — never sent while a
+              decision is pending, and never let through if SecureDesk can't be reached
+              to check it.
             </p>
           </div>
 
@@ -361,17 +363,17 @@ export default function LandingPage() {
           <div className="max-w-narrow mb-12">
             <p className="eyebrow mb-4">Coverage</p>
             <h2 className="text-display-md text-slate-950">
-              Destinations your admins control, not a list we decide for you.
+              Every document type DPDP actually cares about.
             </h2>
             <p className="mt-5 text-[16px] leading-relaxed text-slate-600 max-w-measure">
-              Every destination carries a category, a risk level, and a trust status.
-              Mark your own AI tenant as approved; treat everything unrecognised
-              however your policy says.
+              Detection runs on regex patterns for structured data and an AI vision
+              model for photographed documents — the same categories, whether they
+              arrive as text or as a picture of the physical card.
             </p>
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-px bg-paper-line border border-paper-line rounded-lg overflow-hidden">
-            {DESTINATIONS.map((d) => (
+            {DOCUMENT_TYPES.map((d) => (
               <div key={d.group} className="bg-paper-raised p-6">
                 <p className="eyebrow eyebrow-accent mb-3.5">{d.group}</p>
                 <ul className="space-y-1.5">
@@ -397,11 +399,13 @@ export default function LandingPage() {
                 A tool that watches employees has to be worth trusting.
               </h2>
               <p className="mt-5 text-[16px] leading-relaxed text-slate-600 max-w-measure">
-                SecureDesk records that a policy fired — the classification, the
-                destination, the decision. It does not record what was written. That's
-                an architectural property, not a setting: the raw content never leaves
-                the browser, so there is no copy of it for us to hold, for an
-                administrator to browse, or for an attacker to steal.
+                A file is only ever read to answer one question: does this contain
+                what your policy says can't go out. It's held in memory for the few
+                seconds that takes and never written to disk — SecureDesk has no
+                upload folder, no file store, no URL that could ever serve one back.
+                What's kept permanently is the verdict — categories detected, a hash,
+                the decision — never the matched PAN number, the Aadhaar digits, or a
+                copy of the photo itself.
               </p>
               <p className="mt-4 text-[16px] leading-relaxed text-slate-600 max-w-measure">
                 It's also the honest answer when your works council, your DPO, or the
@@ -426,9 +430,9 @@ export default function LandingPage() {
               </div>
               <ul className="divide-y divide-paper-line">
                 {[
-                  "Classification, confidence, and severity",
-                  "Destination, browser, and device label",
-                  "Which policy fired and what action was taken",
+                  "Document categories detected, and confidence",
+                  "A SHA-256 hash of the file — not the file itself",
+                  "The decision — allow, warn, or block — and why, in plain language",
                 ].map((n) => (
                   <li key={n} className="flex items-start gap-3 px-5 py-3.5">
                     <Check className="w-3.5 h-3.5 text-signal-ink mt-1 flex-none" strokeWidth={2.5} />
@@ -448,12 +452,12 @@ export default function LandingPage() {
             <div>
               <p className="eyebrow mb-4">Regulatory deadline</p>
               <h2 className="text-display-md text-slate-950">
-                DPDP Rule 6 compliance is due May 2027 — not optional, not far off.
+                DPDP Rule 6 compliance is due 13 May 2027 — not optional, not far off.
               </h2>
               <div className="mt-6 inline-flex items-center gap-2.5 rounded-lg border border-paper-line2 bg-paper-sunk px-3.5 py-2.5">
                 <CalendarClock className="w-4 h-4 text-signal-ink flex-none" />
                 <span className="text-[12.5px] font-medium text-slate-800">
-                  Reasonable security safeguards must be in place by May 2027
+                  Reasonable security safeguards must be in place by 13 May 2027
                 </span>
               </div>
             </div>
@@ -494,12 +498,12 @@ export default function LandingPage() {
               Early access
             </p>
             <h2 className="text-display-lg text-white">
-              Find out what's already leaving your browser.
+              Find out what's already going out on WhatsApp.
             </h2>
             <p className="mt-6 text-[16.5px] leading-relaxed text-slate-300 max-w-measure">
-              Deploy SecureDesk in monitor-only mode for two weeks. No blocking, no
-              disruption — just an honest picture of where company data is going.
-              Then decide what to enforce.
+              Deploy the Chrome extension in warn-only mode for two weeks. Nothing gets
+              hard-blocked — just an honest picture of what employees are actually
+              sending through WhatsApp Web. Then decide what to enforce.
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-3">
               <Link to="/register" className="btn !bg-signal-bright !text-[#06121F] hover:!bg-[#7FADFF] !px-5 !py-2.5">
