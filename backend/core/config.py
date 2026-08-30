@@ -172,6 +172,15 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
 
+    # ── Google Sign-In ───────────────────────────────────────────────
+    # The OAuth 2.0 Web client ID from Google Cloud. This is not a secret
+    # (it ships in the frontend bundle), but it IS the audience the backend
+    # checks every Google credential against — a token minted for a
+    # different client ID must not authenticate here. Empty disables the
+    # POST /api/auth/google endpoint entirely (503), same "a capability
+    # with no safe configuration stays off" rule as password reset.
+    GOOGLE_CLIENT_ID: str = ""
+
     # ── URLs / CORS ──────────────────────────────────────────────────
     FRONTEND_URL: str = ""
     BACKEND_URL: str = ""
@@ -275,6 +284,15 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
+
+    @property
+    def google_signin_enabled(self) -> bool:
+        """Google Sign-In needs a client ID to check credentials against.
+
+        Without it there is no audience to verify the token for, so the
+        endpoint stays off rather than accepting whatever it's handed.
+        """
+        return bool(self.GOOGLE_CLIENT_ID)
 
     @property
     def password_reset_enabled(self) -> bool:

@@ -1,16 +1,23 @@
 import csv
 import io
+import re
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from core.config import get_settings
 from core.database import get_db
 from core.dependencies import get_tenant_id
+from repositories.invitations import InvitationsRepository
+from repositories.organizations import OrganizationsRepository
 from repositories.transactions import TransactionsRepository
-from repositories.users import UsersRepository
+from repositories.users import PreTenantAccounts, UsersRepository
+from services.email_alert_service import send_invite_email
 from core.rbac import (
     ADMIN, MANAGER, USER,
     assert_can_act_on, is_admin, require_admin, require_staff,
@@ -18,6 +25,24 @@ from core.rbac import (
 )
 
 router = APIRouter()
+
+# UI-facing label -> stored role. "employee" is what the product calls the
+# `user` role everywhere a person sees it; accept it as an alias so the
+# frontend and any human-entered value line up with what the database and
+# core.rbac actually key on.
+_ROLE_ALIASES = {"employee": USER}
+_ROLE_LABELS = {ADMIN: "an administrator", MANAGER: "a manager", USER: "an employee"}
+
+
+def _normalize_role(raw: str) -> str:
+    v = (raw or "").strip().lower()
+    v = _ROLE_ALIASES.get(v, v)
+    if v not in (ADMIN, MANAGER, USER):
+        raise HTTPException(400, "Role must be admin, manager, or employee.")
+    return v
+
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 # Transactions record their owner as `sender_id`.
 OWNER_FIELD = "sender_id"
@@ -179,17 +204,142 @@ async def change_role(
     Grant or revoke a role. Admin-only, deliberately: this is the one operation
     that can manufacture privilege, so managers must never reach it.
     """
-    if body.role not in (ADMIN, MANAGER, USER):
-        raise HTTPException(400, "Role must be admin, manager, or user.")
+    role = _normalize_role(body.role)
 
     target = await assert_can_act_on(actor, user_id)
 
-    if target["_id"] == actor["_id"] and body.role != ADMIN:
+    if target["_id"] == actor["_id"] and role != ADMIN:
         # Losing the last admin would leave the organisation unmanageable.
         raise HTTPException(400, "You can't remove your own administrator access.")
 
-    await UsersRepository(db, org_id).update_one({"_id": user_id}, {"$set": {"role": body.role}})
-    return {"user_id": user_id, "role": body.role}
+    await UsersRepository(db, org_id).update_one({"_id": user_id}, {"$set": {"role": role}})
+    return {"user_id": user_id, "role": role}
+
+
+# ── Invitations ──────────────────────────────────────────────────────
+
+class InviteBody(BaseModel):
+    email: str
+    role: str = USER
+
+
+_INVITE_TTL = timedelta(days=7)
+
+
+def _invite_view(doc: dict) -> dict:
+    return {
+        "token": doc["_id"],
+        "email": doc.get("email", ""),
+        "role": doc.get("role", USER),
+        "invited_by_name": doc.get("invited_by_name", ""),
+        "created_at": doc["created_at"].isoformat() if hasattr(doc.get("created_at"), "isoformat") else doc.get("created_at"),
+        "expires_at": doc["expires_at"].isoformat() if hasattr(doc.get("expires_at"), "isoformat") else doc.get("expires_at"),
+    }
+
+
+@router.post("/invite")
+async def create_invite(
+    body: InviteBody, actor=Depends(require_admin),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
+    """
+    Pre-assign a role to someone who hasn't signed up yet.
+
+    Admin-only, same as changing a role — an invite is deferred role
+    assignment. Produces a single-use, 7-day link that carries the org and
+    role through the otherwise-public signup path (see routes/auth.py). The
+    link is returned in this response so the admin can hand it out directly;
+    it's also emailed when SMTP is configured. This is the flow for adding a
+    team in bulk without promoting each account one by one afterward.
+    """
+    email = body.email.strip().lower()
+    if not _EMAIL_RE.match(email):
+        raise HTTPException(400, "Enter a valid email address.")
+    role = _normalize_role(body.role)
+
+    users = UsersRepository(db, org_id)
+    if await users.find_one({"email": email}):
+        raise HTTPException(409, "That person is already a member of your organisation.")
+
+    # An account can only belong to one organisation in this model, so we
+    # can't move someone who already has their own. Point the admin at the
+    # role table instead of silently doing nothing.
+    if await PreTenantAccounts(db).find_by_identifier(email, email):
+        raise HTTPException(
+            409,
+            "An account already exists for that email. Ask them to sign in — "
+            "you can set their role from the Users table once they're in your org.",
+        )
+
+    invites = InvitationsRepository(db, org_id)
+    existing = await invites.find_active_for_email(email)
+    if existing:
+        # Re-issue rather than stack duplicates: drop the old one so the
+        # newest link (and role) is the only one that works.
+        await invites.revoke(existing["_id"])
+
+    token = uuid.uuid4().hex
+    now = datetime.now(timezone.utc)
+    doc = {
+        "_id": token,
+        "email": email,
+        "role": role,
+        "invited_by": actor["_id"],
+        "invited_by_name": actor.get("name", ""),
+        "created_at": now,
+        "expires_at": now + _INVITE_TTL,
+        "accepted": False,
+    }
+    await invites.create(doc)
+
+    settings = get_settings()
+    invite_url = f"{settings.FRONTEND_URL.rstrip('/')}/register?invite={token}"
+
+    emailed = False
+    if settings.password_reset_enabled:  # same SMTP switch
+        org = await OrganizationsRepository(db).get(org_id)
+        emailed = await run_in_threadpool(
+            send_invite_email,
+            email,
+            (org or {}).get("name", "your organisation"),
+            actor.get("name", "An administrator"),
+            _ROLE_LABELS[role],
+            invite_url,
+        )
+
+    return {
+        "email": email,
+        "role": role,
+        "invite_url": invite_url,
+        "expires_at": doc["expires_at"].isoformat(),
+        "emailed": emailed,
+    }
+
+
+@router.get("/invites")
+async def list_invites(
+    actor=Depends(require_admin),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
+    """Pending (unaccepted, unexpired) invites for the organisation."""
+    now = datetime.now(timezone.utc)
+    docs = await InvitationsRepository(db, org_id).list_pending()
+    return [
+        _invite_view(d)
+        for d in docs
+        if not d.get("expires_at") or d["expires_at"] > now
+    ]
+
+
+@router.delete("/invites/{token}")
+async def revoke_invite(
+    token: str, actor=Depends(require_admin),
+    org_id: str = Depends(get_tenant_id), db=Depends(get_db),
+):
+    ok = await InvitationsRepository(db, org_id).revoke(token)
+    if not ok:
+        raise HTTPException(404, "That invite doesn't exist or was already used.")
+    return {"revoked": True, "token": token}
 
 
 @router.get("/export")

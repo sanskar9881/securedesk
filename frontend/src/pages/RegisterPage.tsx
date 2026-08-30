@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { Eye, EyeOff, Loader2, AlertCircle, ArrowRight, Check } from "lucide-react";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { Eye, EyeOff, Loader2, AlertCircle, ArrowRight, Check, Mail } from "lucide-react";
 import api from "../api/axios";
 import { apiErrorMessage } from "../api/errors";
 import { useAuth } from "../context/AuthContext";
 import AuthShell, { AsideProof } from "../components/AuthShell";
 import { toRole } from "../components/RoleChoice";
+import GoogleAuthButton from "../components/GoogleAuthButton";
 
 /** Password strength, judged honestly — length first, variety second. */
 function strengthOf(pw: string): { score: 0 | 1 | 2 | 3; label: string } {
@@ -23,6 +24,11 @@ function strengthOf(pw: string): { score: 0 | 1 | 2 | 3; label: string } {
 export default function RegisterPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  // An invite token (from /register?invite=…) carries a pre-assigned role
+  // and organisation. The backend validates it; here it only changes copy
+  // and is forwarded on submit.
+  const invite = params.get("invite");
 
   const [name, setName] = useState("");
   const [identifier, setIdentifier] = useState("");
@@ -50,15 +56,14 @@ export default function RegisterPage() {
         name: name.trim(),
         identifier: id,
         password,
+        ...(invite ? { invite } : {}),
       });
 
-      // Public registration always creates a plain employee account — the
-      // server enforces this regardless of what a request sends (see
-      // routes/auth.py: RegisterBody.role is accepted-and-ignored, kept
-      // only so an older client that still sends one doesn't 422).
-      // Elevation is a separate, authenticated, admin-only action
-      // (PATCH /api/admin/users/{id}/role). toRole still guards against a
-      // malformed/unexpected value in the response rather than assuming.
+      // Public registration creates a plain employee account. The one
+      // exception is a valid invite token, which the server (not this
+      // client) resolves to a pre-assigned role — RegisterBody.role is
+      // still accepted-and-ignored. toRole guards the response shape either
+      // way rather than assuming.
       const granted = toRole(data.role);
       login(data.access_token, granted, data.name, data.user_id || "");
       navigate(granted === "admin" || granted === "manager" ? "/admin" : "/dashboard");
@@ -87,12 +92,26 @@ export default function RegisterPage() {
     >
       <div className="mb-8">
         <h1 className="text-[26px] leading-tight tracking-[-0.028em] font-semibold text-slate-950">
-          Create your workspace
+          {invite ? "Accept your invite" : "Create your workspace"}
         </h1>
         <p className="mt-2 text-[14px] text-slate-500">
-          Free to start. No card required.
+          {invite
+            ? "Set up your account to join your team's workspace."
+            : "Free to start. No card required."}
         </p>
       </div>
+
+      {invite && (
+        <div className="mb-5 flex items-start gap-2.5 rounded border border-signal-ink/30 bg-signal-ink/5 px-3.5 py-3">
+          <Mail className="w-4 h-4 text-signal-ink mt-px flex-none" />
+          <p className="text-[13px] leading-snug text-slate-600">
+            You've been invited to join an existing workspace. Your role is set
+            by whoever invited you.
+          </p>
+        </div>
+      )}
+
+      <GoogleAuthButton invite={invite} />
 
       {error && (
         <div
@@ -202,11 +221,11 @@ export default function RegisterPage() {
           {busy ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              Creating workspace
+              {invite ? "Joining" : "Creating workspace"}
             </>
           ) : (
             <>
-              Create workspace
+              {invite ? "Join workspace" : "Create workspace"}
               <ArrowRight className="w-4 h-4" />
             </>
           )}
@@ -215,7 +234,9 @@ export default function RegisterPage() {
 
       <ul className="mt-6 space-y-2">
         {[
-          "An administrator can change any account's role later",
+          invite
+            ? "Your role is set by whoever invited you"
+            : "You'll be the administrator of your new workspace",
           "Detection runs on-device — content stays in the browser",
         ].map((t) => (
           <li key={t} className="flex items-start gap-2.5">

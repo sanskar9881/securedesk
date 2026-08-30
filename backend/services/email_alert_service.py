@@ -123,3 +123,68 @@ def send_password_reset_email(to_email: str, name: str, reset_url: str) -> bool:
     except Exception as e:
         print(f"[Password Reset] Failed: {e}")
         return False
+
+
+def send_invite_email(
+    to_email: str,
+    org_name: str,
+    inviter_name: str,
+    role_label: str,
+    invite_url: str,
+) -> bool:
+    """Deliver an organisation invite link.
+
+    Blocking (smtplib); call it through run_in_threadpool from async code.
+
+    Best-effort by design: the same link is returned to the admin who
+    created the invite (an authenticated, admin-only response — unlike a
+    password-reset token, this link only lets someone create a fresh
+    account with a pre-set role, it cannot take over an existing one), so a
+    delivery failure here is logged and the flow still completes with the
+    admin able to share the link themselves.
+    """
+    smtp_user = os.getenv("SMTP_EMAIL", "")
+    smtp_pass = os.getenv("SMTP_PASSWORD", "")
+    if not smtp_user or not smtp_pass:
+        print(f"[Invite] SMTP not configured — invite for {to_email} not emailed")
+        return False
+
+    html = f"""
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+  <div style="background:linear-gradient(135deg,#0f172a,#1e3a5f);color:#fff;padding:24px;border-radius:12px 12px 0 0">
+    <h1 style="margin:0;font-size:20px">🛡️ SecureDesk</h1>
+  </div>
+  <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-top:none">
+    <p style="font-size:16px">Hi,</p>
+    <p><strong>{inviter_name}</strong> has invited you to join
+       <strong>{org_name}</strong> on SecureDesk as
+       <strong>{role_label}</strong>.</p>
+    <p>Click below to set up your account. This link expires in 7 days.</p>
+    <a href="{invite_url}"
+       style="display:inline-block;background:#6366f1;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;margin-top:8px">
+      Accept invite →
+    </a>
+    <p style="color:#64748b;font-size:14px;margin-top:20px">
+      If you weren't expecting this, you can ignore this email.
+    </p>
+  </div>
+  <div style="background:#f8fafc;padding:16px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0;border-top:none;font-size:12px;color:#94a3b8;text-align:center">
+    SecureDesk — AI-Powered Data Protection
+  </div>
+</div>"""
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"You're invited to {org_name} on SecureDesk"
+        msg["From"]    = smtp_user
+        msg["To"]      = to_email
+        msg.attach(MIMEText(html, "html"))
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ctx) as srv:
+            srv.login(smtp_user, smtp_pass)
+            srv.sendmail(smtp_user, to_email, msg.as_string())
+        print(f"[Invite] Sent to {to_email}")
+        return True
+    except Exception as e:
+        print(f"[Invite] Failed: {e}")
+        return False

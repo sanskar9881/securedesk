@@ -1,10 +1,13 @@
 """
 Grant a role to an existing account, from the shell.
 
-Registration is public, so it can only ever create plain users. That leaves
-a fresh install with no admin and no way to make one over the API — this
-script is the bootstrap, and it deliberately requires shell access to the
-deployment plus the database credentials.
+Normal onboarding no longer needs this: whoever signs up (no invite) gets
+their own organisation and is its admin (see routes/auth.py:
+ensure_personal_org), and they add their team via POST /api/admin/invite.
+This script is the fallback for edge cases the in-app flow can't reach —
+e.g. an org whose only admin was demoted, or a manual data fix. It
+deliberately requires shell access to the deployment plus the database
+credentials.
 
 Usage:
     python -m scripts.promote_user <email-or-phone> <admin|manager|user>

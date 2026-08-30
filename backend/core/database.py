@@ -171,8 +171,14 @@ INDEXES: dict[str, list[tuple[list[tuple[str, int]], dict[str, Any]]]] = {
     "organizations": [
         ([("owner_id", 1)], {"name": "owner_idx"}),
     ],
+    # Invitations (role-assigned org invites). Looked up by token (_id) on
+    # the signup path; scoped by org_id on the admin path. TTL: a spent or
+    # stale invite is a dead credential — it should not sit in the
+    # collection past its window, same rule as reset_tokens.
     "invitations": [
         ([("org_id", 1)], {"name": "org_idx"}),
+        ([("email", 1)], {"name": "email_idx"}),
+        ([("expires_at", 1)], {"name": "expiry_ttl_idx", "expireAfterSeconds": 0}),
     ],
     "subscriptions": [
         ([("user_id", 1)], {"name": "user_idx"}),

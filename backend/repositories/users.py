@@ -65,8 +65,32 @@ class PreTenantAccounts:
     async def set_org_id(self, user_id: str, org_id: str) -> None:
         await self.collection.update_one({"_id": user_id}, {"$set": {"org_id": org_id}})
 
+    async def assign_new_org(self, user_id: str, org_id: str, role: str) -> None:
+        """Link an account to the organisation it just created, as its owner.
+
+        One atomic write: the creator of a fresh org is its administrator, so
+        org_id and the role are set together (see
+        routes/auth.py:ensure_personal_org). Someone who instead JOINS an
+        existing org via an invite never reaches here — their org_id is set
+        at signup, so ensure_personal_org early-returns and their invited
+        role is left alone.
+        """
+        await self.collection.update_one(
+            {"_id": user_id}, {"$set": {"org_id": org_id, "role": role}}
+        )
+
     async def set_password_hash(self, user_id: str, password_hash: str) -> None:
         await self.collection.update_one({"_id": user_id}, {"$set": {"password": password_hash}})
+
+    async def set_auth_provider(self, user_id: str, provider: str) -> None:
+        """Record how an account authenticates ("local" | "google").
+
+        Called when an existing email/password account signs in with Google
+        for the first time — the two are the same person, so the account is
+        linked rather than duplicated. The password hash is left untouched
+        so it stays usable as a fallback login path.
+        """
+        await self.collection.update_one({"_id": user_id}, {"$set": {"auth_provider": provider}})
 
 
 # Backward-compatible free function — same lookup, old call shape. Kept only

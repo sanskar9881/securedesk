@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, Loader2, AlertCircle, ArrowRight } from "lucide-react";
+import toast from "react-hot-toast";
 import api from "../api/axios";
 import { apiErrorMessage } from "../api/errors";
 import { useAuth } from "../context/AuthContext";
 import AuthShell, { AsideProof } from "../components/AuthShell";
-import RoleChoice, { type Role, toRole } from "../components/RoleChoice";
+import RoleChoice, { ROLES, type Role, toRole } from "../components/RoleChoice";
+import GoogleAuthButton from "../components/GoogleAuthButton";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -13,9 +15,11 @@ export default function LoginPage() {
 
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-  // Which console the person means to open. A safety net, NOT an
-  // authorisation control — the server signs the token with the role held in
-  // the database and uses this only to reject a mismatch.
+  // Which console the person means to open. A hint, NOT an authorisation
+  // control and NOT a gate — the server signs the token with the role held
+  // in the database regardless. If the pick turns out to be wrong we don't
+  // block the sign-in; we correct it with a toast and route to the console
+  // that matches their real role.
   const [entry, setEntry] = useState<Role>("user");
   const [reveal, setReveal] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -36,10 +40,15 @@ export default function LoginPage() {
         expected_role: entry,
       });
 
-      // The server remains the only authority on role — `entry` above is only
-      // compared against what's stored, never trusted as a grant.
+      // The server is the only authority on role. If the person picked the
+      // wrong console, don't fail the login — sign them in, tell them their
+      // actual role, and send them to the right place.
       const role = toRole(data.role);
       login(data.access_token, role, data.name, data.user_id || "");
+      if (role !== entry) {
+        const label = ROLES.find((r) => r.id === role)?.label ?? role;
+        toast(`Your account role is ${label}. Signing you in there.`, { icon: "ℹ️" });
+      }
       navigate(role === "admin" || role === "manager" ? "/admin" : "/dashboard");
     } catch (err: unknown) {
       setError(
@@ -72,6 +81,8 @@ export default function LoginPage() {
           Access your organisation's security console.
         </p>
       </div>
+
+      <GoogleAuthButton />
 
       {error && (
         <div

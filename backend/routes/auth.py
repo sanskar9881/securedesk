@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict
 from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 from core.config import get_settings
 from core.database import get_database
+from repositories.invitations import PendingInvites
 from repositories.organizations import OrganizationsRepository
 from repositories.refresh_tokens import RefreshTokensRepository
 from repositories.reset_tokens import ResetTokensRepository
@@ -41,6 +42,17 @@ async def ensure_personal_org(user: dict) -> dict:
     share an organisation with colleagues does so explicitly afterward
     (POST /api/org/create, invite flow), not by an inferred match.
 
+    The account that a fresh organisation is created for IS that
+    organisation's creator and owner, so it is set to `admin` here — of that
+    org and only that org. This is the normal onboarding path: someone signs
+    up, gets their own workspace, and can immediately invite their team from
+    the Users page without an operator running promote_user for them. It is
+    NOT a way to pick a role at registration: the role is forced to admin
+    regardless of anything the request said, and only ever for a brand-new,
+    single-member org. Anyone who instead JOINS an existing org via an
+    invite already has org_id set before this runs, so the branch below is
+    skipped entirely and their invited role is untouched.
+
     Idempotent: a user who already has org_id is returned unchanged, so this
     is safe to call on every register() and every login().
     """
@@ -54,8 +66,9 @@ async def ensure_personal_org(user: dict) -> dict:
         name=f"{user.get('name') or user['_id']}'s organisation",
         owner_id=user["_id"],
     )
-    await PreTenantAccounts(db).set_org_id(user["_id"], org_id)
+    await PreTenantAccounts(db).assign_new_org(user["_id"], org_id, ADMIN_ROLE)
     user["org_id"] = org_id
+    user["role"] = ADMIN_ROLE
     return user
 
 
@@ -123,13 +136,19 @@ async def admin_only(user=Depends(get_current_user)):
     return user
 
 
-# The roles an account may hold. Registration can no longer select among
-# these — see register() — but login still compares against them so someone
-# who opens the wrong console is told so plainly.
+# The roles an account may hold. Neither registration nor login lets a
+# request select among these — the role always comes from the database
+# (see register() and login()). Kept as the canonical list for reference
+# and future validation.
 VALID_ROLES = ("admin", "manager", "user")
 
-# The only role a public registration can ever produce.
+# The role a public registration produces for someone JOINING an existing
+# org via an invite that didn't specify otherwise.
 USER_ROLE = "user"
+
+# The role forced on the account a brand-new organisation is created for —
+# its creator/owner. See ensure_personal_org. Never selectable by a request.
+ADMIN_ROLE = "admin"
 
 
 class RegisterBody(BaseModel):
@@ -153,14 +172,26 @@ class RegisterBody(BaseModel):
     # register() never reads this. Do not start.
     role: str | None = None
 
+    # An opaque invite token (see POST /api/admin/invite). Unlike `role`
+    # above, this DOES influence the new account's org and role — but it is
+    # not a caller-chosen value: it was minted server-side by an
+    # authenticated admin, is single-use, expires, and is looked up in the
+    # database. The role still comes from that stored record, never from the
+    # request body. Absent/blank/invalid → a normal public registration.
+    invite: str | None = None
+
 
 class LoginBody(BaseModel):
     identifier: str
     password:   str
-    # Which console the person intends to open. This NEVER grants anything —
-    # the role always comes from the database. It is only compared against the
-    # stored role so someone who picks the wrong door is told so plainly
-    # instead of silently landing in a console they didn't expect.
+    # Which console the person picked on the sign-in form. Purely advisory:
+    # it NEVER grants anything (the role always comes from the database) and
+    # it no longer blocks — a wrong pick used to 403, which meant a
+    # mis-click on a radio button locked someone out of their own account.
+    # The frontend now just corrects the picker with a toast and sends the
+    # person to the console matching their real role. Still accepted so the
+    # existing client keeps working; the response's `role` is the source of
+    # truth for where to land.
     expected_role: str | None = None
 
 
@@ -191,22 +222,54 @@ async def register(request: Request, body: RegisterBody):
             "Enter a valid email (you@gmail.com) or phone number (9876543210)"
         )
 
-    # ── Role — never chosen by the caller ───────────────────────
-    # Registration is public and unauthenticated, so it always produces a
-    # plain user. It previously honoured a `role` field from the request
-    # body, which meant anyone on the internet could create themselves an
-    # administrator account. `body.role` is still accepted by the model for
-    # backward compatibility and is deliberately never read here.
-    #
-    # Elevation is a separate, authenticated, admin-only operation:
-    #   PATCH /api/admin/users/{user_id}/role   (see routes/admin.py)
-    # To create the very first admin in a fresh install, run
-    #   python -m scripts.promote_user <email-or-phone> admin
-    # which requires shell access to the deployment.
-    role = USER_ROLE
-
     cid = clean_identifier(ident)
     accounts = PreTenantAccounts(get_database())
+
+    # ── Role & organisation ────────────────────────────────────────
+    # Registration is public and unauthenticated. The caller can NOT pick a
+    # role: `body.role` is still accepted by the model for backward
+    # compatibility and is deliberately never read (it once let anyone on
+    # the internet mint themselves an admin account).
+    #
+    # Two paths produce a role, neither of them caller-chosen:
+    #
+    #   no invite  -> a fresh personal organisation is created for this
+    #                 account and it becomes the admin OF THAT ORG ONLY
+    #                 (ensure_personal_org, called after insert). This is the
+    #                 normal onboarding path — sign up, get your workspace,
+    #                 invite your team — with no operator step. It cannot
+    #                 touch any existing org: the org is brand new and has
+    #                 exactly one member.
+    #
+    #   with invite -> a server-minted, single-use, expiring token created by
+    #                 an authenticated admin (POST /api/admin/invite). It
+    #                 decides which existing org the account joins and with
+    #                 which role, read from the stored invite record.
+    #
+    # promote_user.py stays as a fallback for edge cases (e.g. recovering an
+    # org whose only admin was demoted). PATCH /api/admin/users/{id}/role is
+    # the in-app way to change a role afterward.
+    role = USER_ROLE
+    invited_org_id: str | None = None
+    invite_token = (body.invite or "").strip()
+    invite: dict | None = None
+    if invite_token:
+        invite = await PendingInvites(get_database()).find_valid(invite_token)
+        if not invite:
+            raise HTTPException(
+                400,
+                "This invite link is invalid or has expired. "
+                "Ask your administrator to send a new one.",
+            )
+        invited_email = (invite.get("email") or "").lower()
+        if invited_email and has_at and cid != invited_email:
+            raise HTTPException(
+                400,
+                f"This invite was sent to {invited_email}. "
+                f"Sign up with that email address.",
+            )
+        role = invite["role"]
+        invited_org_id = invite["org_id"]
 
     # ── Duplicate check ──────────────────────────────────────────
     existing = await accounts.find_by_identifier(cid, ident)
@@ -223,8 +286,9 @@ async def register(request: Request, body: RegisterBody):
     doc = {
         "_id":          uid,
         "name":         name,
-        "role":         role,   # always USER_ROLE — see above
+        "role":         role,
         "password":     pw_hash,
+        "auth_provider": "local",
         "avatar_color": "#6366f1",
         "language":     "en",
         "created_at":   datetime.now(timezone.utc),
@@ -232,7 +296,23 @@ async def register(request: Request, body: RegisterBody):
         "email":        cid if has_at    else "",
         "phone":        cid if is_digits else "",
     }
+    if invited_org_id:
+        # Join the inviter's org directly with the invited role. org_id is
+        # set here, so ensure_personal_org below is a no-op — no personal
+        # org, no admin promotion.
+        doc["org_id"] = invited_org_id
     await accounts.insert(doc)
+    if invite:
+        await PendingInvites(get_database()).mark_accepted(invite_token)
+
+    # Resolve the org now rather than lazily on the first authenticated
+    # request, so the token minted just below already carries the final
+    # role. For a non-invite signup this creates the account's own
+    # organisation and makes it the admin (see ensure_personal_org); for an
+    # invite it returns unchanged.
+    user_doc = await ensure_personal_org(doc)
+    role = user_doc["role"]
+
     token = make_token(uid, role)
     # Additive since Phase 4: a client that only reads access_token (every
     # client shipped before this) is unaffected. A client that adopts
@@ -274,6 +354,16 @@ async def login(request: Request, body: LoginBody):
             "No account found with this email/phone. Please register first."
         )
 
+    # A Google-only account has no password to check. Tell the person which
+    # button to use rather than letting the bcrypt check fail as a generic
+    # "wrong password". An account that was created with a password and
+    # later linked to Google keeps its hash, so it still logs in here.
+    if not user.get("password"):
+        raise HTTPException(
+            403,
+            'This account uses Google sign-in. Use the "Continue with Google" button.',
+        )
+
     try:
         ok = bcrypt.checkpw(body.password.encode(), user["password"].encode())
     except Exception:
@@ -283,19 +373,13 @@ async def login(request: Request, body: LoginBody):
         raise HTTPException(401, "Wrong password. Please try again.")
 
     # ── Return the role EXACTLY as stored in DB ──────────────────
-    # The client may say which console it expected; that is only ever used to
-    # reject a mismatch. It can never widen access, because the token is signed
-    # with `stored_role` regardless of what was requested.
+    # `expected_role` from the body is not consulted here at all. It can
+    # never widen access (the token is always signed with `stored_role`),
+    # and it no longer narrows access either: a wrong picker selection used
+    # to 403, locking someone out of their own account over a mis-click. The
+    # client compares its picked role against the `role` we return and, on a
+    # mismatch, shows a toast and routes to the correct console.
     stored_role = user.get("role", "user")
-
-    wanted = (body.expected_role or "").strip().lower()
-    if wanted and wanted in VALID_ROLES and wanted != stored_role:
-        label = {"admin": "an administrator", "manager": "a manager", "user": "an employee"}
-        raise HTTPException(
-            403,
-            f"This account is registered as {label[stored_role]}, not {label[wanted]}. "
-            f"Sign in as {label[stored_role]} instead, or ask your administrator to change your access.",
-        )
 
     token = make_token(user["_id"], stored_role)
     refresh_token = await token_service.issue_refresh_family(get_database(), user["_id"])
@@ -308,6 +392,148 @@ async def login(request: Request, body: LoginBody):
         "role":          stored_role,
         "name":          user["name"],
         "user_id":       user["_id"],
+    }
+
+
+# ── Google Sign-In ───────────────────────────────────────────────────
+
+class GoogleBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # The ID token (a JWT) minted by Google Identity Services in the
+    # browser. Verified here — signature, issuer, expiry, and audience
+    # (our GOOGLE_CLIENT_ID) — before a single field of it is trusted.
+    credential: str
+    # Optional invite token, same meaning as RegisterBody.invite: lets an
+    # invited person accept with Google instead of email/password.
+    invite: str | None = None
+
+
+def _verify_google_credential(credential: str, client_id: str) -> dict:
+    """Verify a Google ID token and return its claims.
+
+    Blocking: google-auth fetches (and caches) Google's signing certs over
+    HTTPS on first use. Call through run_in_threadpool. Raises ValueError
+    on any verification failure — bad signature, wrong audience, expired,
+    malformed.
+    """
+    from google.auth.transport import requests as google_requests
+    from google.oauth2 import id_token as google_id_token
+
+    return google_id_token.verify_oauth2_token(
+        credential, google_requests.Request(), client_id
+    )
+
+
+@router.post("/google")
+async def google_auth(request: Request, body: GoogleBody):
+    """
+    Sign in (or sign up) with a Google ID token.
+
+    After a token is issued the result is indistinguishable from
+    /api/auth/login — same response shape, same refresh family, same role
+    resolution. The Google-specific work is all up front: verify the
+    credential, then find-or-create the account behind its email.
+    """
+    login_limiter.check(client_key(request, "google:" + (request.client.host if request.client else "")))
+
+    settings = get_settings()
+    if not settings.google_signin_enabled:
+        raise HTTPException(503, "Google sign-in isn't configured on this server.")
+
+    try:
+        idinfo = await run_in_threadpool(
+            _verify_google_credential, body.credential, settings.GOOGLE_CLIENT_ID
+        )
+    except ValueError:
+        raise HTTPException(401, "Google sign-in failed. Please try again.")
+
+    # email_verified can arrive as a bool or the string "true" depending on
+    # the token — normalise before trusting it.
+    verified = idinfo.get("email_verified")
+    if verified is False or str(verified).lower() == "false":
+        raise HTTPException(403, "Your Google account's email address isn't verified.")
+
+    email = (idinfo.get("email") or "").strip().lower()
+    if not email:
+        raise HTTPException(401, "Google didn't return an email address.")
+    google_name = (idinfo.get("name") or email.split("@")[0]).strip()
+    picture = idinfo.get("picture", "")
+
+    db = get_database()
+    accounts = PreTenantAccounts(db)
+    user = await accounts.find_by_identifier(email, email)
+
+    if user:
+        # Same person — link, don't duplicate. Keep any existing password as
+        # a fallback login path (see login()).
+        if user.get("auth_provider") != "google":
+            await accounts.set_auth_provider(user["_id"], "google")
+        user = await ensure_personal_org(user)
+        uid = user["_id"]
+        role = user.get("role", USER_ROLE)
+        display_name = user.get("name") or google_name
+    else:
+        uid = str(uuid.uuid4())
+        role = USER_ROLE
+        invited_org_id: str | None = None
+        invite: dict | None = None
+        invite_token = (body.invite or "").strip()
+        if invite_token:
+            invite = await PendingInvites(db).find_valid(invite_token)
+            if not invite:
+                raise HTTPException(
+                    400,
+                    "This invite link is invalid or has expired. "
+                    "Ask your administrator to send a new one.",
+                )
+            invited_email = (invite.get("email") or "").lower()
+            if invited_email and invited_email != email:
+                raise HTTPException(
+                    400,
+                    f"This invite was sent to {invited_email}. "
+                    f"Sign in with that Google account.",
+                )
+            role = invite["role"]
+            invited_org_id = invite["org_id"]
+
+        doc = {
+            "_id":          uid,
+            "name":         google_name,
+            "role":         role,
+            "password":     None,          # no password for a Google account
+            "auth_provider": "google",
+            "avatar_color": "#6366f1",
+            "language":     "en",
+            "created_at":   datetime.now(timezone.utc),
+            "dob":          "",
+            "email":        email,
+            "phone":        "",
+            "picture":      picture,
+        }
+        if invited_org_id:
+            doc["org_id"] = invited_org_id
+        await accounts.insert(doc)
+        if invite:
+            await PendingInvites(db).mark_accepted(invite_token)
+        # No invite → create this account's own organisation and make it the
+        # admin of it; with an invite → org_id is already set, so this is a
+        # no-op and the invited role stands. Either way, read the role back.
+        user = await ensure_personal_org(doc)
+        role = user["role"]
+        display_name = google_name
+
+    token = make_token(uid, role)
+    refresh_token = await token_service.issue_refresh_family(db, uid)
+
+    return {
+        "access_token":  token,
+        "refresh_token": refresh_token,
+        "token_type":    "bearer",
+        "expires_in":    ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        "role":          role,
+        "name":          display_name,
+        "user_id":       uid,
     }
 
 
@@ -350,7 +576,11 @@ async def forgot_password(body: dict):
     cid   = clean_identifier(ident)
     user  = await PreTenantAccounts(db).find_by_identifier(cid, cid)
 
-    if user and user.get("email"):
+    # `user.get("password")` gates out Google-only accounts: they have no
+    # password to reset, and minting them a reset token would be a way to
+    # set one and bypass Google entirely. Silent (still a 202) — same
+    # oracle-avoidance rule as the unknown-account case.
+    if user and user.get("email") and user.get("password"):
         tok = str(uuid.uuid4())
         await ResetTokensRepository(db).create({
             "_id":        tok,
