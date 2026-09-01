@@ -5,10 +5,7 @@ import { Wordmark } from "../components/Mark";
 import BlockModalPreview from "../components/BlockModalPreview";
 import useMarketingSurface from "../hooks/useMarketingSurface";
 
-// Placeholder until the extension is actually published (see the top-level
-// build report — visibility is planned as Unlisted, installable by direct
-// link, not publicly searchable).
-const CHROME_STORE_URL = "https://chrome.google.com/webstore/category/extensions";
+const EXTENSION_DOWNLOAD_URL = "/extension.zip";
 
 const SEES: { label: string; sees: boolean }[] = [
   { label: "A file attached, dropped, or pasted on web.whatsapp.com", sees: true },
@@ -106,13 +103,12 @@ export default function ExtensionPage() {
               </p>
               <div className="mt-8 flex flex-wrap items-center gap-3">
                 <a
-                  href={CHROME_STORE_URL}
-                  target="_blank"
-                  rel="noreferrer"
+                  href={EXTENSION_DOWNLOAD_URL}
+                  download="securedesk-extension.zip"
                   className="btn btn-primary !bg-slate-900 !text-paper hover:!bg-slate-800 !px-5 !py-2.5"
                 >
                   <Chrome className="w-4 h-4" />
-                  Install from Chrome Web Store
+                  Download Extension
                 </a>
                 <Link to="/admin/devices" className="btn btn-secondary !border-paper-line2 !text-slate-700 hover:!bg-paper-sunk !px-5 !py-2.5">
                   Generate a device token
@@ -128,6 +124,72 @@ export default function ExtensionPage() {
                 Illustrative — recreated from the extension's actual block screen
               </p>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Manual install instructions ───────────────────────── */}
+      <section className="border-b border-paper-line bg-paper-raised">
+        <div className="max-w-shell mx-auto px-6 lg:px-8 py-16 lg:py-20">
+          <p className="eyebrow mb-4">Pilot install</p>
+          <h2 className="text-display-md text-slate-950 mb-4">Load the extension manually in Chrome.</h2>
+          <p className="text-[16px] leading-relaxed text-slate-600 max-w-[60ch] mb-8">
+            For early pilots, we distribute the extension as a ZIP bundle and load it as an unpacked extension directly in Chrome. This keeps the rollout controlled while you validate the workflow before broader deployment.
+          </p>
+
+          <div className="mb-10 flex flex-wrap items-center gap-3">
+            <a
+              href={EXTENSION_DOWNLOAD_URL}
+              download="securedesk-extension.zip"
+              className="btn btn-primary !bg-slate-900 !text-paper hover:!bg-slate-800 !px-5 !py-2.5"
+            >
+              Download Extension
+            </a>
+            <a
+              href="#install-steps"
+              className="btn btn-secondary !border-paper-line2 !text-slate-700 hover:!bg-paper-sunk !px-5 !py-2.5"
+            >
+              View 4-step guide
+            </a>
+          </div>
+
+          <div id="install-steps" className="grid gap-6 xl:grid-cols-2">
+            {[
+              {
+                title: "1. Open the Chrome Extensions page",
+                text: "In Chrome, visit chrome://extensions. This is the page where you manage installed extensions and the hidden developer tools for unpacked installs.",
+                image: "/screenshots/install-step-1.svg",
+                alt: "Screenshot of the Chrome Extensions page with the URL chrome://extensions displayed and the toolbar at the top of the browser visible.",
+              },
+              {
+                title: "2. Turn on Developer mode",
+                text: "Toggle Developer mode in the top-right corner. This reveals the Load unpacked button and lets Chrome accept a local extension without publishing it to the Chrome Web Store.",
+                image: "/screenshots/install-step-2.svg",
+                alt: "Screenshot of the Chrome Extensions page with Developer mode enabled and the Load unpacked button visible under the extensions list.",
+              },
+              {
+                title: "3. Load the downloaded ZIP contents",
+                text: "Click Load unpacked, then choose the extracted extension folder that came from the ZIP. Do not select the ZIP archive itself; select the folder that contains the manifest and assets.",
+                image: "/screenshots/install-step-3.svg",
+                alt: "Screenshot of the file picker dialog open to a downloaded securedesk extension folder with the manifest.json file visible.",
+              },
+              {
+                title: "4. Confirm the extension is installed and pinned",
+                text: "Chrome finishes installing the extension. Pin it to the toolbar if you want employees to see it easily, and confirm the SecureDesk icon appears in the browser extension tray.",
+                image: "/screenshots/install-step-4.svg",
+                alt: "Screenshot of the installed extension card in Chrome with the SecureDesk icon pinned in the toolbar and the extension list showing it as enabled.",
+              },
+            ].map((step) => (
+              <div key={step.title} className="bg-paper border border-paper-line rounded-lg p-4 shadow-sm">
+                <h3 className="text-[15px] font-semibold text-slate-900 mb-3">{step.title}</h3>
+                <img
+                  src={step.image}
+                  alt={step.alt}
+                  className="w-full h-auto rounded border border-paper-line bg-paper-sunk mb-3"
+                />
+                <p className="text-[13.5px] leading-relaxed text-slate-600">{step.text}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
