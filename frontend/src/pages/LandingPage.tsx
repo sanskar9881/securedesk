@@ -178,6 +178,12 @@ export default function LandingPage() {
 
           <div className="flex items-center gap-2">
             <Link
+              to="/extension"
+              className="inline-flex items-center gap-1.5 text-[13.5px] font-medium text-signal-ink border border-signal-ink/40 hover:border-signal-ink hover:bg-signal-wash px-3.5 py-2 rounded transition-colors"
+            >
+              Get Extension
+            </Link>
+            <Link
               to="/login"
               className="hidden sm:inline-flex text-[13.5px] text-slate-600 hover:text-slate-900 px-3 py-2 transition-colors"
             >
@@ -254,6 +260,52 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── The extension, shown ────────────────────────────────── */}
+      <section className="border-b border-paper-line">
+        <div className="max-w-shell mx-auto px-6 lg:px-8 py-16 lg:py-24">
+          <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] gap-14 items-center">
+            <div>
+              <p className="eyebrow eyebrow-accent mb-4">The Chrome &amp; Edge extension</p>
+              <h2 className="text-display-md text-slate-950">
+                This is what an employee actually sees.
+              </h2>
+              <p className="mt-5 text-[16px] leading-relaxed text-slate-600 max-w-measure">
+                SecureDesk ships as a browser extension for Chrome and Edge. Not a silent log
+                entry, and not a dismissible toast — the file is held until a verdict comes
+                back, and a BLOCK means the file never reaches the send button. The reason is
+                in plain language, never the matched values themselves, and the decision is
+                written to your organisation's evidence chain automatically.
+              </p>
+              <ul className="mt-7 space-y-2.5">
+                {[
+                  "Held before it sends — not flagged after",
+                  "Plain-language reason, never the raw sensitive value",
+                  "Logged to the evidence chain the moment it happens",
+                ].map((t) => (
+                  <li key={t} className="flex items-start gap-2.5">
+                    <Check className="w-3.5 h-3.5 text-signal-ink mt-0.5 flex-none" strokeWidth={2.5} />
+                    <span className="text-[13.5px] text-slate-600 leading-snug">{t}</span>
+                  </li>
+                ))}
+              </ul>
+              <Link
+                to="/extension"
+                className="inline-flex items-center gap-1.5 mt-7 text-[13.5px] font-medium text-signal-ink border border-signal-ink/40 hover:border-signal-ink hover:bg-signal-wash px-3.5 py-2 rounded transition-colors"
+              >
+                Get the extension
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+            <div>
+              <BlockModalPreview />
+              <p className="mt-3 mono text-[10.5px] tracking-[0.07em] uppercase text-slate-500 text-center">
+                Illustrative — recreated from the extension's actual block screen
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── The gap ─────────────────────────────────────────────── */}
       <section className="border-b border-paper-line bg-paper-raised">
         <div className="max-w-shell mx-auto px-6 lg:px-8 py-16 lg:py-20">
@@ -309,51 +361,6 @@ export default function LandingPage() {
               </li>
             ))}
           </ol>
-        </div>
-      </section>
-
-      {/* ── Enforcement, shown ──────────────────────────────────── */}
-      <section className="border-b border-paper-line">
-        <div className="max-w-shell mx-auto px-6 lg:px-8 py-16 lg:py-24">
-          <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] gap-14 items-center">
-            <div>
-              <p className="eyebrow mb-4">Stage five, in practice</p>
-              <h2 className="text-display-md text-slate-950">
-                This is what an employee actually sees.
-              </h2>
-              <p className="mt-5 text-[16px] leading-relaxed text-slate-600 max-w-measure">
-                Not a silent log entry, and not a dismissible toast — the file is held until a
-                verdict comes back, and a BLOCK means the file never reaches the send button.
-                The reason is in plain language, never the matched values themselves, and the
-                decision is written to your organisation's evidence chain automatically.
-              </p>
-              <ul className="mt-7 space-y-2.5">
-                {[
-                  "Held before it sends — not flagged after",
-                  "Plain-language reason, never the raw sensitive value",
-                  "Logged to the evidence chain the moment it happens",
-                ].map((t) => (
-                  <li key={t} className="flex items-start gap-2.5">
-                    <Check className="w-3.5 h-3.5 text-signal-ink mt-0.5 flex-none" strokeWidth={2.5} />
-                    <span className="text-[13.5px] text-slate-600 leading-snug">{t}</span>
-                  </li>
-                ))}
-              </ul>
-              <Link
-                to="/extension"
-                className="inline-flex items-center gap-1.5 mt-7 text-[13.5px] font-medium text-slate-900 hover:text-signal-ink transition-colors"
-              >
-                See the Chrome extension
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-            <div>
-              <BlockModalPreview />
-              <p className="mt-3 mono text-[10.5px] tracking-[0.07em] uppercase text-slate-500 text-center">
-                Illustrative — recreated from the extension's actual block screen
-              </p>
-            </div>
-          </div>
         </div>
       </section>
 

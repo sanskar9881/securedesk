@@ -142,10 +142,16 @@ def send_invite_email(
     account with a pre-set role, it cannot take over an existing one), so a
     delivery failure here is logged and the flow still completes with the
     admin able to share the link themselves.
+
+    Reads SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASSWORD / SMTP_FROM,
+    falling back to the older Gmail-only SMTP_EMAIL when SMTP_USER is unset.
     """
-    smtp_user = os.getenv("SMTP_EMAIL", "")
+    smtp_user = os.getenv("SMTP_USER") or os.getenv("SMTP_EMAIL", "")
     smtp_pass = os.getenv("SMTP_PASSWORD", "")
-    if not smtp_user or not smtp_pass:
+    smtp_host = os.getenv("SMTP_HOST") or ("smtp.gmail.com" if smtp_user else "")
+    smtp_port = int((os.getenv("SMTP_PORT") or "465").strip())
+    smtp_from = os.getenv("SMTP_FROM") or smtp_user
+    if not smtp_host or not smtp_user or not smtp_pass:
         print(f"[Invite] SMTP not configured — invite for {to_email} not emailed")
         return False
 
@@ -175,14 +181,20 @@ def send_invite_email(
 
     try:
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"You're invited to {org_name} on SecureDesk"
-        msg["From"]    = smtp_user
+        msg["Subject"] = f"You've been invited to join {org_name} on SecureDesk"
+        msg["From"]    = smtp_from
         msg["To"]      = to_email
         msg.attach(MIMEText(html, "html"))
         ctx = ssl.create_default_context()
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ctx) as srv:
-            srv.login(smtp_user, smtp_pass)
-            srv.sendmail(smtp_user, to_email, msg.as_string())
+        if smtp_port == 465:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port, context=ctx) as srv:
+                srv.login(smtp_user, smtp_pass)
+                srv.sendmail(smtp_from, to_email, msg.as_string())
+        else:
+            with smtplib.SMTP(smtp_host, smtp_port) as srv:
+                srv.starttls(context=ctx)
+                srv.login(smtp_user, smtp_pass)
+                srv.sendmail(smtp_from, to_email, msg.as_string())
         print(f"[Invite] Sent to {to_email}")
         return True
     except Exception as e:

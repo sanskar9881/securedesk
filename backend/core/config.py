@@ -194,6 +194,13 @@ class Settings(BaseSettings):
     SMTP_EMAIL: str = ""
     SMTP_PASSWORD: str = ""
     MANAGER_ALERT_EMAIL: str = ""
+    # Generic SMTP config (any provider, not just Gmail). SMTP_USER falls
+    # back to SMTP_EMAIL and SMTP_FROM to SMTP_USER, so the older
+    # two-variable Gmail setup keeps working unchanged.
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_FROM: str = ""
 
     # ── Billing ──────────────────────────────────────────────────────
     RAZORPAY_KEY_ID: str = ""
@@ -304,6 +311,18 @@ class Settings(BaseSettings):
         until SMTP is configured.
         """
         return bool(self.SMTP_EMAIL and self.SMTP_PASSWORD)
+
+    @property
+    def smtp_configured(self) -> bool:
+        """True when there is enough SMTP config to actually send mail.
+
+        Accepts either the generic SMTP_HOST/SMTP_USER/SMTP_PASSWORD trio or
+        the older Gmail-only SMTP_EMAIL/SMTP_PASSWORD pair (host then
+        defaults to smtp.gmail.com).
+        """
+        user = self.SMTP_USER or self.SMTP_EMAIL
+        host = self.SMTP_HOST or ("smtp.gmail.com" if user else "")
+        return bool(host and user and self.SMTP_PASSWORD)
 
     @property
     def allowed_origins(self) -> list[str]:

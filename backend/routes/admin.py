@@ -296,7 +296,7 @@ async def create_invite(
     invite_url = f"{settings.FRONTEND_URL.rstrip('/')}/register?invite={token}"
 
     emailed = False
-    if settings.password_reset_enabled:  # same SMTP switch
+    if settings.smtp_configured:
         org = await OrganizationsRepository(db).get(org_id)
         emailed = await run_in_threadpool(
             send_invite_email,
